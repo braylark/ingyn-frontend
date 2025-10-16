@@ -16,6 +16,7 @@ type DashboardPage = "home" | "create" | "scheduler" | "analytics" | "engagement
 export default function App() {
   const [appState, setAppState] = useState<AppState>("login");
   const [currentPage, setCurrentPage] = useState<DashboardPage>("home");
+  const [hasAccount, setHasAccount] = useState(false);
 
   const handleLogin = () => {
     setAppState("create-ambassador");
@@ -32,6 +33,10 @@ export default function App() {
 
   const handleNavigate = (page: string) => {
     setCurrentPage(page as DashboardPage);
+  };
+
+  const handleAccountCreated = () => {
+    setHasAccount(true);
   };
 
   // Onboarding Flow
@@ -56,7 +61,7 @@ export default function App() {
       <main className="flex-1 p-6 pb-24 lg:pb-6 lg:ml-64 overflow-auto">
         <div className="max-w-7xl mx-auto">
           {currentPage === "home" && <Dashboard onNavigate={handleNavigate} />}
-          {currentPage === "create" && <ContentCreationHub />}
+          {currentPage === "create" && <ContentCreationHub hasAccount={hasAccount} onAccountCreated={handleAccountCreated} />}
           {currentPage === "scheduler" && <Scheduler />}
           {currentPage === "analytics" && <Analytics />}
           {currentPage === "engagement" && <Engagement />}

@@ -561,10 +561,6 @@
     grid-row-start: 1;
   }
 
-  .m-\[0px\] {
-    margin: 0;
-  }
-
   .-mx-1 {
     margin-inline: calc(var(--spacing) * -1);
   }
@@ -653,8 +649,16 @@
     margin-bottom: 0;
   }
 
+  .mb-\[16px\] {
+    margin-bottom: 16px;
+  }
+
   .ml-2 {
     margin-left: calc(var(--spacing) * 2);
+  }
+
+  .ml-\[0px\] {
+    margin-left: 0;
   }
 
   .ml-\[106px\] {
@@ -1320,6 +1324,10 @@
 
   .bg-\[\#6464B4\] {
     background-color: #6464b4;
+  }
+
+  .bg-\[\#6464B4\]\/5 {
+    background-color: oklab(54.0887% .0244749 -.120481 / .05);
   }
 
   .bg-\[\#6464B4\]\/10 {

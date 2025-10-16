@@ -17,7 +17,7 @@ export default function AccountCreationDialog({ isOpen, onComplete }: AccountCre
         <div className="space-y-6">
           {/* Logo */}
           <div className="flex items-center gap-3 justify-center">
-            <div className="w-12 h-12 bg-[#00D1B2] rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-[#6464B4] rounded-xl flex items-center justify-center">
               <Sparkles className="w-7 h-7 text-white" />
             </div>
             <span className="text-3xl text-[#1E1E1E]">Ingyn.AI</span>
@@ -71,15 +71,15 @@ export default function AccountCreationDialog({ isOpen, onComplete }: AccountCre
 
             <Button
               onClick={onComplete}
-              className="w-full bg-[#00D1B2] hover:bg-[#00b89d] text-white rounded-xl h-12"
+              className="w-full bg-[#6464B4] hover:bg-[#5454A0] text-white rounded-xl h-12"
             >
               Create Account & Start Trial
             </Button>
 
-            <p className="text-xs text-center text-[#A1A1A1]">
+            <p className="text-xs text-center text-gray-600">
               By creating an account, you agree to our{" "}
-              <a href="#" className="text-[#00D1B2] hover:underline">Terms of Service</a> and{" "}
-              <a href="#" className="text-[#00D1B2] hover:underline">Privacy Policy</a>
+              <a href="#" className="text-[#6464B4] hover:underline">Terms of Service</a> and{" "}
+              <a href="#" className="text-[#6464B4] hover:underline">Privacy Policy</a>
             </p>
           </div>
         </div>

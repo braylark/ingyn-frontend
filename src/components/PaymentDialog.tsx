@@ -32,17 +32,17 @@ export default function PaymentDialog({ isOpen, onClose, onComplete }: PaymentDi
               onClick={() => setPaymentMethod("card")}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
                 paymentMethod === "card"
-                  ? "border-[#00D1B2] bg-[#00D1B2]/5"
+                  ? "border-[#6464B4] bg-[#6464B4]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    paymentMethod === "card" ? "border-[#00D1B2]" : "border-gray-300"
+                    paymentMethod === "card" ? "border-[#6464B4]" : "border-gray-300"
                   }`}>
                     {paymentMethod === "card" && (
-                      <div className="w-2.5 h-2.5 rounded-full bg-[#00D1B2]"></div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#6464B4]"></div>
                     )}
                   </div>
                   <span className="text-[#1E1E1E]">Credit or Debit Card</span>
@@ -78,7 +78,7 @@ export default function PaymentDialog({ isOpen, onClose, onComplete }: PaymentDi
                     <CreditCard className="w-5 h-5 text-[#A1A1A1]" />
                     <span className="text-[#1E1E1E]">Use •••• 4603</span>
                   </div>
-                  <button className="text-sm text-[#00D1B2] hover:underline">
+                  <button className="text-sm text-[#6464B4] hover:underline">
                     Pay another way
                   </button>
                 </div>
@@ -90,16 +90,16 @@ export default function PaymentDialog({ isOpen, onClose, onComplete }: PaymentDi
               onClick={() => setPaymentMethod("bank")}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
                 paymentMethod === "bank"
-                  ? "border-[#00D1B2] bg-[#00D1B2]/5"
+                  ? "border-[#6464B4] bg-[#6464B4]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
               <div className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  paymentMethod === "bank" ? "border-[#00D1B2]" : "border-gray-300"
+                  paymentMethod === "bank" ? "border-[#6464B4]" : "border-gray-300"
                 }`}>
                   {paymentMethod === "bank" && (
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#00D1B2]"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#6464B4]"></div>
                   )}
                 </div>
                 <span className="text-[#1E1E1E]">US Bank</span>
@@ -111,16 +111,16 @@ export default function PaymentDialog({ isOpen, onClose, onComplete }: PaymentDi
               onClick={() => setPaymentMethod("paypal")}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
                 paymentMethod === "paypal"
-                  ? "border-[#00D1B2] bg-[#00D1B2]/5"
+                  ? "border-[#6464B4] bg-[#6464B4]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
               <div className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  paymentMethod === "paypal" ? "border-[#00D1B2]" : "border-gray-300"
+                  paymentMethod === "paypal" ? "border-[#6464B4]" : "border-gray-300"
                 }`}>
                   {paymentMethod === "paypal" && (
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#00D1B2]"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#6464B4]"></div>
                   )}
                 </div>
                 <span className="text-[#1E1E1E]">PayPal</span>
@@ -131,35 +131,35 @@ export default function PaymentDialog({ isOpen, onClose, onComplete }: PaymentDi
 
           {/* Due Today */}
           <div className="flex items-center justify-between py-4 border-t border-gray-200">
-            <span className="text-[#A1A1A1]">Due Today</span>
+            <span className="text-gray-600">Due Today</span>
             <div className="text-right">
-              <p className="text-[#1E1E1E]">$0.00 <span className="text-sm text-[#00D1B2]">for a 7-day free trial</span></p>
-              <p className="text-xs text-[#A1A1A1]">Then $139.00/year</p>
+              <p className="text-[#1E1E1E]">$0.00 <span className="text-sm text-[#6464B4]">for a 7-day free trial</span></p>
+              <p className="text-xs text-gray-600">Then $139.00/year</p>
             </div>
           </div>
 
           {/* Start Free Trial Button */}
           <Button
             onClick={onComplete}
-            className="w-full bg-[#00D1B2] hover:bg-[#00b89d] text-white rounded-xl h-12"
+            className="w-full bg-[#6464B4] hover:bg-[#5454A0] text-white rounded-xl h-12"
           >
             Start Your Free Trial
           </Button>
 
           {/* Terms */}
-          <p className="text-xs text-center text-[#A1A1A1]">
+          <p className="text-xs text-center text-gray-600">
             You'll notice a $1.00 "Authorization" on your card, which is just a check to ensure funds in your
             account. If you cancel your trial, no charges will apply. This site is protected by reCAPTCHA and
             the Google{" "}
-            <a href="#" className="text-[#00D1B2] hover:underline">Privacy Policy</a> and{" "}
-            <a href="#" className="text-[#00D1B2] hover:underline">Terms of Service</a> apply.
+            <a href="#" className="text-[#6464B4] hover:underline">Privacy Policy</a> and{" "}
+            <a href="#" className="text-[#6464B4] hover:underline">Terms of Service</a> apply.
           </p>
 
           {/* Footer */}
-          <p className="text-xs text-center text-[#A1A1A1]">
+          <p className="text-xs text-center text-gray-600">
             By continuing you accept our{" "}
-            <a href="#" className="text-[#00D1B2] hover:underline">Terms of Use</a> and{" "}
-            <a href="#" className="text-[#00D1B2] hover:underline">Privacy Policy</a>
+            <a href="#" className="text-[#6464B4] hover:underline">Terms of Use</a> and{" "}
+            <a href="#" className="text-[#6464B4] hover:underline">Privacy Policy</a>
           </p>
         </div>
       </DialogContent>

@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
+import AccountCreationDialog from "./AccountCreationDialog";
+import PaymentDialog from "./PaymentDialog";
 import { toast } from "sonner@2.0.3";
 
 const initialSuggestedPosts = [
@@ -62,7 +64,12 @@ const sampleImages = [
   "https://images.unsplash.com/photo-1518611012118-696072aa579a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
 ];
 
-export default function ContentCreationHub() {
+interface ContentCreationHubProps {
+  hasAccount: boolean;
+  onAccountCreated: () => void;
+}
+
+export default function ContentCreationHub({ hasAccount, onAccountCreated }: ContentCreationHubProps) {
   const [customPrompt, setCustomPrompt] = useState("");
   const [editingPost, setEditingPost] = useState<number | null>(null);
   const [editedCaption, setEditedCaption] = useState("");
@@ -72,6 +79,12 @@ export default function ContentCreationHub() {
   const [suggestedPosts, setSuggestedPosts] = useState(initialSuggestedPosts);
   const [nextId, setNextId] = useState(100);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  
+  // Account creation and payment flow
+  const [showAccountDialog, setShowAccountDialog] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"schedule" | "post" | null>(null);
+  const [pendingPostId, setPendingPostId] = useState<number | null>(null);
 
   const handleEditPost = (postId: number, caption: string) => {
     setEditingPost(postId);
@@ -189,13 +202,15 @@ export default function ContentCreationHub() {
         {/* Action Buttons */}
         <div className="flex gap-2 pt-2">
           <Button
-            className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#00b89d] text-white rounded-xl"
+            onClick={() => handleScheduleClick(post.id)}
+            className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl"
             size="sm"
           >
             <Calendar className="w-4 h-4 mr-2" />
             Schedule
           </Button>
           <Button
+            onClick={() => handlePostNowClick(post.id)}
             variant="outline"
             className="flex-1 border-gray-200 rounded-xl"
             size="sm"
@@ -316,13 +331,15 @@ export default function ContentCreationHub() {
 
             <div className="flex gap-2">
               <Button
-                className="bg-[#00D1B2] hover:bg-[#00b89d] text-white rounded-xl"
+                onClick={() => handleScheduleClick(post.id)}
+                className="bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl"
                 size="sm"
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule
               </Button>
               <Button
+                onClick={() => handlePostNowClick(post.id)}
                 variant="outline"
                 className="border-gray-200 rounded-xl"
                 size="sm"
@@ -386,6 +403,48 @@ export default function ContentCreationHub() {
     toast.success("New suggested post added!");
   };
 
+  const handleScheduleClick = (postId: number) => {
+    if (!hasAccount) {
+      setPendingAction("schedule");
+      setPendingPostId(postId);
+      setShowAccountDialog(true);
+    } else {
+      // Proceed with scheduling
+      toast.success("Post scheduled successfully!");
+    }
+  };
+
+  const handlePostNowClick = (postId: number) => {
+    if (!hasAccount) {
+      setPendingAction("post");
+      setPendingPostId(postId);
+      setShowAccountDialog(true);
+    } else {
+      // Proceed with posting
+      toast.success("Post published successfully!");
+    }
+  };
+
+  const handleAccountCreationComplete = () => {
+    setShowAccountDialog(false);
+    setShowPaymentDialog(true);
+  };
+
+  const handlePaymentComplete = () => {
+    setShowPaymentDialog(false);
+    onAccountCreated();
+    
+    // Complete the pending action
+    if (pendingAction === "schedule") {
+      toast.success("Account created! Post scheduled successfully!");
+    } else if (pendingAction === "post") {
+      toast.success("Account created! Post published successfully!");
+    }
+    
+    setPendingAction(null);
+    setPendingPostId(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -410,7 +469,7 @@ export default function ContentCreationHub() {
             placeholder="Describe the post you want to create... (e.g., 'A motivational post about morning yoga routines')"
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            className="rounded-xl border-gray-200 m-[0px] px-[12px] py-[4px] min-h-[80px]"
+            className="rounded-xl border-gray-200 min-h-[80px] py-[4px] px-[12px] mt-[0px] mr-[0px] mb-[16px] ml-[0px]"
           />
           <Button
             onClick={handleGenerateCustomPost}
@@ -419,9 +478,7 @@ export default function ContentCreationHub() {
             <Sparkles className="w-4 h-4 mr-2" />
             Generate
           </Button>
-          <p className="text-xs text-gray-600">
-            Or describe what you want and let AI create the perfect post for you
-          </p>
+      
         </div>
       </Card>
 
@@ -561,6 +618,21 @@ export default function ContentCreationHub() {
       <TrainAmbassadorDialog 
         isOpen={showTrainDialog} 
         onClose={() => setShowTrainDialog(false)} 
+      />
+
+      <AccountCreationDialog
+        isOpen={showAccountDialog}
+        onComplete={handleAccountCreationComplete}
+      />
+
+      <PaymentDialog
+        isOpen={showPaymentDialog}
+        onClose={() => {
+          setShowPaymentDialog(false);
+          setPendingAction(null);
+          setPendingPostId(null);
+        }}
+        onComplete={handlePaymentComplete}
       />
     </div>
   );

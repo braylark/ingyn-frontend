@@ -668,7 +668,7 @@ export default function CreateAmbassador({ onComplete, onBack }: CreateAmbassado
                         onClick={handleContinue}
                         className="flex-1 bg-[#6464B4] hover:bg-[#5454A0] text-white rounded-xl h-12"
                       >
-                        <Sparkles className="w-4 h-4 mr-2" />
+                      
                         Complete Setup
                       </Button>
                     )}
