@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
@@ -15,8 +14,6 @@ import {
   Send,
   Plus,
   Heart,
-  MessageCircle,
-  Share2,
   Trash2,
   LayoutGrid,
   List,
@@ -27,11 +24,16 @@ import AccountCreationDialog from "./AccountCreationDialog";
 import PaymentDialog from "./PaymentDialog";
 import { toast } from "sonner@2.0.3";
 
+// 👇 NEW: import your API client (JS file is fine)
+import { generateImage, generateText } from "../lib/api"; // path: src/lib/api.js
+
 const initialSuggestedPosts = [
   {
     id: 1,
-    image: "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    caption: "Starting the week with intention 🌅 Remember, self-care isn't selfish—it's essential. What's one thing you're doing for yourself today?",
+    image:
+      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+    caption:
+      "Starting the week with intention 🌅 Remember, self-care isn't selfish—it's essential. What's one thing you're doing for yourself today?",
     hashtags: ["#MindfulMonday", "#WellnessJourney", "#SelfCare", "#MorningRoutine"],
     reason: "High engagement on Monday motivational content",
     predictedReach: "2.5K",
@@ -39,8 +41,10 @@ const initialSuggestedPosts = [
   },
   {
     id: 2,
-    image: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    caption: "Fueling my body with colors from nature 🥗✨ Nutrition isn't about restriction—it's about nourishment. What's your favorite healthy meal?",
+    image:
+      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+    caption:
+      "Fueling my body with colors from nature 🥗✨ Nutrition isn't about restriction—it's about nourishment. What's your favorite healthy meal?",
     hashtags: ["#HealthyEating", "#PlantBased", "#NutritionTips", "#WellnessLifestyle"],
     reason: "Nutrition content performs 40% better with your audience",
     predictedReach: "3.1K",
@@ -48,8 +52,10 @@ const initialSuggestedPosts = [
   },
   {
     id: 3,
-    image: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    caption: "Find your balance 🧘‍♀️ In the chaos of daily life, taking time to breathe and reset isn't a luxury—it's a necessity. Join me for tomorrow's meditation session!",
+    image:
+      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+    caption:
+      "Find your balance 🧘‍♀️ In the chaos of daily life, taking time to breathe and reset isn't a luxury—it's a necessity. Join me for tomorrow's meditation session!",
     hashtags: ["#YogaLife", "#Meditation", "#MindBodySoul", "#InnerPeace"],
     reason: "Meditation posts drive 2x more saves than average",
     predictedReach: "1.9K",
@@ -69,7 +75,10 @@ interface ContentCreationHubProps {
   onAccountCreated: () => void;
 }
 
-export default function ContentCreationHub({ hasAccount, onAccountCreated }: ContentCreationHubProps) {
+export default function ContentCreationHub({
+  hasAccount,
+  onAccountCreated,
+}: ContentCreationHubProps) {
   const [customPrompt, setCustomPrompt] = useState("");
   const [editingPost, setEditingPost] = useState<number | null>(null);
   const [editedCaption, setEditedCaption] = useState("");
@@ -79,7 +88,10 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
   const [suggestedPosts, setSuggestedPosts] = useState(initialSuggestedPosts);
   const [nextId, setNextId] = useState(100);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  
+
+  // 👇 NEW: generation state
+  const [generating, setGenerating] = useState(false);
+
   // Account creation and payment flow
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -100,11 +112,7 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
     <Card key={post.id} className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col">
       {/* Post Image */}
       <div className="w-full aspect-square relative flex-shrink-0">
-        <ImageWithFallback
-          src={post.image}
-          alt={`Post ${post.id}`}
-          className="w-full h-full object-cover"
-        />
+        <ImageWithFallback src={post.image} alt={`Post ${post.id}`} className="w-full h-full object-cover" />
         {/* Social Proof Overlay */}
         <div className="absolute bottom-3 left-3 right-3 flex gap-2">
           <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
@@ -151,12 +159,7 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
               >
                 Save
               </Button>
-              <Button
-                onClick={() => setEditingPost(null)}
-                size="sm"
-                variant="outline"
-                className="flex-1 rounded-lg"
-              >
+              <Button onClick={() => setEditingPost(null)} size="sm" variant="outline" className="flex-1 rounded-lg">
                 Cancel
               </Button>
             </div>
@@ -190,10 +193,7 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
         {/* Hashtags */}
         <div className="flex flex-wrap gap-2">
           {post.hashtags.map((tag: string, idx: number) => (
-            <Badge
-              key={idx}
-              className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
-            >
+            <Badge key={idx} className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs">
               {tag}
             </Badge>
           ))}
@@ -201,20 +201,11 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
 
         {/* Action Buttons */}
         <div className="flex gap-2 pt-2">
-          <Button
-            onClick={() => handleScheduleClick(post.id)}
-            className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl"
-            size="sm"
-          >
+          <Button onClick={() => handleScheduleClick(post.id)} className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl" size="sm">
             <Calendar className="w-4 h-4 mr-2" />
             Schedule
           </Button>
-          <Button
-            onClick={() => handlePostNowClick(post.id)}
-            variant="outline"
-            className="flex-1 border-gray-200 rounded-xl"
-            size="sm"
-          >
+          <Button onClick={() => handlePostNowClick(post.id)} variant="outline" className="flex-1 border-gray-200 rounded-xl" size="sm">
             <Send className="w-4 h-4 mr-2" />
             Post Now
           </Button>
@@ -228,11 +219,7 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
       <div className="flex gap-4 p-4">
         {/* Post Image - Smaller in list view */}
         <div className="w-32 h-32 md:w-40 md:h-40 relative flex-shrink-0 rounded-xl overflow-hidden">
-          <ImageWithFallback
-            src={post.image}
-            alt={`Post ${post.id}`}
-            className="w-full h-full object-cover"
-          />
+          <ImageWithFallback src={post.image} alt={`Post ${post.id}`} className="w-full h-full object-cover" />
         </div>
 
         {/* Post Content */}
@@ -262,19 +249,10 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
                 className="rounded-xl border-gray-200 min-h-[100px]"
               />
               <div className="flex gap-2">
-                <Button
-                  onClick={handleSaveEdit}
-                  size="sm"
-                  className="bg-[#00D1B2] hover:bg-[#00b89d] text-white rounded-lg"
-                >
+                <Button className="bg-[#00D1B2] hover:bg-[#00b89d] text-white rounded-lg" size="sm" onClick={handleSaveEdit}>
                   Save
                 </Button>
-                <Button
-                  onClick={() => setEditingPost(null)}
-                  size="sm"
-                  variant="outline"
-                  className="rounded-lg"
-                >
+                <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setEditingPost(null)}>
                   Cancel
                 </Button>
               </div>
@@ -308,10 +286,7 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
           {/* Hashtags */}
           <div className="flex flex-wrap gap-2">
             {post.hashtags.map((tag: string, idx: number) => (
-              <Badge
-                key={idx}
-                className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
-              >
+              <Badge key={idx} className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs">
                 {tag}
               </Badge>
             ))}
@@ -330,20 +305,11 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
             </div>
 
             <div className="flex gap-2">
-              <Button
-                onClick={() => handleScheduleClick(post.id)}
-                className="bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl"
-                size="sm"
-              >
+              <Button onClick={() => handleScheduleClick(post.id)} className="bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl" size="sm">
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule
               </Button>
-              <Button
-                onClick={() => handlePostNowClick(post.id)}
-                variant="outline"
-                className="border-gray-200 rounded-xl"
-                size="sm"
-              >
+              <Button onClick={() => handlePostNowClick(post.id)} variant="outline" className="border-gray-200 rounded-xl" size="sm">
                 <Send className="w-4 h-4 mr-2" />
                 Post Now
               </Button>
@@ -354,35 +320,69 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
     </Card>
   );
 
-  const handleGenerateCustomPost = () => {
+  // 👇 UPDATED: call backend, create post from real response
+  const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
       toast.error("Please enter a prompt to generate content");
       return;
     }
 
-    // Generate a new post based on the prompt
-    const newPost = {
-      id: nextId,
-      image: sampleImages[Math.floor(Math.random() * sampleImages.length)],
-      caption: `${customPrompt} ✨ This is an AI-generated caption based on your prompt. Edit it to make it perfect!`,
-      hashtags: ["#Custom", "#AIGenerated", "#YourBrand", "#ContentCreation"],
-      predictedReach: `${(Math.random() * 3 + 1).toFixed(1)}K`,
-      bestTime: `${Math.floor(Math.random() * 12 + 1)}:00 ${Math.random() > 0.5 ? 'AM' : 'PM'}`,
-    };
+    setGenerating(true);
+    try {
+      toast.loading("Generating image…", { id: "gen" });
 
-    setMyPosts([newPost, ...myPosts]);
-    setNextId(nextId + 1);
-    setCustomPrompt("");
-    setActiveTab("my-posts");
-    toast.success("Custom post generated! Check 'My Posts' to review.");
+      // 1) Image generation
+      const imgRes: any = await generateImage(customPrompt);
+      // Normalize common response shapes from generator
+      const images: string[] =
+        imgRes?.images ||
+        imgRes?.image_urls ||
+        (imgRes?.image ? [imgRes.image] : []) ||
+        [];
+
+      if (!images.length) {
+        throw new Error("No image returned from generator");
+      }
+
+      // 2) Optional: caption generation (fallback text if API not ready)
+      let caption = "";
+      try {
+        const txtRes: any = await generateText(`Write an engaging, brand-safe Instagram caption (<= 150 words) for: ${customPrompt}`);
+        caption = txtRes?.text || txtRes?.caption || "";
+      } catch {
+        caption = `${customPrompt} ✨ (AI-generated image – edit this caption to make it perfect)`;
+      }
+
+      // 3) Create a new post object for "My Posts"
+      const newPost = {
+        id: nextId,
+        image: images[0],
+        caption,
+        hashtags: ["#Custom", "#AIGenerated", "#YourBrand", "#ContentCreation"],
+        predictedReach: `${(Math.random() * 3 + 1).toFixed(1)}K`,
+        bestTime: `${Math.floor(Math.random() * 12 + 1)}:00 ${Math.random() > 0.5 ? "AM" : "PM"}`,
+      };
+
+      setMyPosts((prev) => [newPost, ...prev]);
+      setNextId((n) => n + 1);
+      setCustomPrompt("");
+      setActiveTab("my-posts");
+
+      toast.success("Custom post generated! Check 'My Posts' to review.", { id: "gen" });
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Generation failed", { id: "gen" });
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleDeletePost = (postId: number, isMyPost: boolean) => {
     if (isMyPost) {
-      setMyPosts(myPosts.filter(post => post.id !== postId));
+      setMyPosts(myPosts.filter((post) => post.id !== postId));
       toast.success("Post removed from My Posts");
     } else {
-      setSuggestedPosts(suggestedPosts.filter(post => post.id !== postId));
+      setSuggestedPosts(suggestedPosts.filter((post) => post.id !== postId));
       toast.success("Post removed from Suggested Posts");
     }
   };
@@ -391,11 +391,12 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
     const newSuggestedPost = {
       id: nextId,
       image: sampleImages[Math.floor(Math.random() * sampleImages.length)],
-      caption: "New AI-generated suggestion 🌟 Based on your audience's preferences and trending topics in your niche.",
+      caption:
+        "New AI-generated suggestion 🌟 Based on your audience's preferences and trending topics in your niche.",
       hashtags: ["#Trending", "#AIContent", "#Engagement", "#Growth"],
       reason: "Generated based on latest engagement trends",
       predictedReach: `${(Math.random() * 3 + 1).toFixed(1)}K`,
-      bestTime: `${Math.floor(Math.random() * 12 + 1)}:00 ${Math.random() > 0.5 ? 'AM' : 'PM'}`,
+      bestTime: `${Math.floor(Math.random() * 12 + 1)}:00 ${Math.random() > 0.5 ? "AM" : "PM"}`,
     };
 
     setSuggestedPosts([...suggestedPosts, newSuggestedPost]);
@@ -409,7 +410,6 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // Proceed with scheduling
       toast.success("Post scheduled successfully!");
     }
   };
@@ -420,7 +420,6 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // Proceed with posting
       toast.success("Post published successfully!");
     }
   };
@@ -433,14 +432,13 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
   const handlePaymentComplete = () => {
     setShowPaymentDialog(false);
     onAccountCreated();
-    
-    // Complete the pending action
+
     if (pendingAction === "schedule") {
       toast.success("Account created! Post scheduled successfully!");
     } else if (pendingAction === "post") {
       toast.success("Account created! Post published successfully!");
     }
-    
+
     setPendingAction(null);
     setPendingPostId(null);
   };
@@ -451,11 +449,8 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           <h1 className="text-3xl text-[#1E1E1E] mb-2">Create Content</h1>
-          <p className="text-gray-600">
-            AI-powered content suggestions tailored to your audience
-          </p>
+          <p className="text-gray-600">AI-powered content suggestions tailored to your audience</p>
         </div>
-
       </div>
 
       {/* Custom Prompt Bar */}
@@ -473,12 +468,12 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
           />
           <Button
             onClick={handleGenerateCustomPost}
+            disabled={generating}
             className="bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl px-6"
           >
             <Sparkles className="w-4 h-4 mr-2" />
-            Generate
+            {generating ? "Generating…" : "Generate"}
           </Button>
-      
         </div>
       </Card>
 
@@ -491,8 +486,9 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
           <div className="flex-1 space-y-3">
             <h3 className="text-xl text-white">Why These Posts?</h3>
             <p className="text-white/90 text-sm">
-              Ingyn's AI has analyzed your audience engagement patterns, trending topics in your niche, and optimal posting times. 
-              These suggestions are designed to maximize reach and authenticity based on real-time data from your connected platforms.
+              Ingyn's AI has analyzed your audience engagement patterns, trending topics in your niche, and optimal
+              posting times. These suggestions are designed to maximize reach and authenticity based on real-time data
+              from your connected platforms.
             </p>
             <div className="grid md:grid-cols-3 gap-3 mt-4">
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg p-3">
@@ -525,16 +521,10 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <TabsList className="bg-gray-100 border border-gray-200">
-            <TabsTrigger 
-              value="my-posts" 
-              className="data-[state=active]:bg-[#6464B4] data-[state=active]:text-white text-gray-600"
-            >
+            <TabsTrigger value="my-posts" className="data-[state=active]:bg-[#6464B4] data-[state=active]:text-white text-gray-600">
               My Posts {myPosts.length > 0 && `(${myPosts.length})`}
             </TabsTrigger>
-            <TabsTrigger 
-              value="suggested" 
-              className="data-[state=active]:bg-[#6464B4] data-[state=active]:text-white text-gray-600"
-            >
+            <TabsTrigger value="suggested" className="data-[state=active]:bg-[#6464B4] data-[state=active]:text-white text-gray-600">
               Suggested Posts {suggestedPosts.length > 0 && `(${suggestedPosts.length})`}
             </TabsTrigger>
           </TabsList>
@@ -546,8 +536,8 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
               size="sm"
               onClick={() => setViewMode("grid")}
               className={`rounded-md ${
-                viewMode === "grid" 
-                  ? "bg-[#6464B4] text-white hover:bg-[#6464B4] hover:text-white" 
+                viewMode === "grid"
+                  ? "bg-[#6464B4] text-white hover:bg-[#6464B4] hover:text-white"
                   : "text-gray-600 hover:text-[#1E1E1E] hover:bg-gray-200"
               }`}
             >
@@ -558,8 +548,8 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
               size="sm"
               onClick={() => setViewMode("list")}
               className={`rounded-md ${
-                viewMode === "list" 
-                  ? "bg-[#6464B4] text-white hover:bg-[#6464B4] hover:text-white" 
+                viewMode === "list"
+                  ? "bg-[#6464B4] text-white hover:bg-[#6464B4] hover:text-white"
                   : "text-gray-600 hover:text-[#1E1E1E] hover:bg-gray-200"
               }`}
             >
@@ -574,17 +564,11 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
             <Card className="p-12 bg-white border border-gray-200 rounded-2xl text-center">
               <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-xl text-[#1E1E1E] mb-2">No posts yet</h3>
-              <p className="text-gray-600 mb-6">
-                Generate custom content using the AI prompt above or create posts manually
-              </p>
+              <p className="text-gray-600 mb-6">Generate custom content using the AI prompt above or create posts manually</p>
             </Card>
           ) : (
             <div className={viewMode === "grid" ? "grid lg:grid-cols-3 gap-6" : "space-y-4"}>
-              {myPosts.map((post) => 
-                viewMode === "grid" 
-                  ? renderPostCard(post, false, true)
-                  : renderPostList(post, false, true)
-              )}
+              {myPosts.map((post) => (viewMode === "grid" ? renderPostCard(post, false, true) : renderPostList(post, false, true)))}
             </div>
           )}
         </TabsContent>
@@ -592,38 +576,22 @@ export default function ContentCreationHub({ hasAccount, onAccountCreated }: Con
         {/* Suggested Posts Tab */}
         <TabsContent value="suggested" className="mt-4">
           <div className="flex items-center justify-between mb-6">
-            <p className="text-[#A1A1A1]">
-              AI-powered suggestions based on your audience trends
-            </p>
-            <Button
-              onClick={handleGenerateMoreSuggested}
-              variant="outline"
-              className="bg-transparent border-white/10 text-white hover:bg-white/5 hover:text-white rounded-xl"
-            >
+            <p className="text-[#A1A1A1]">AI-powered suggestions based on your audience trends</p>
+            <Button onClick={handleGenerateMoreSuggested} variant="outline" className="bg-transparent border-white/10 text-white hover:bg-white/5 hover:text-white rounded-xl">
               <Plus className="w-4 h-4 mr-2" />
               Generate More
             </Button>
           </div>
 
           <div className={viewMode === "grid" ? "grid lg:grid-cols-3 gap-6" : "space-y-4"}>
-            {suggestedPosts.map((post) => 
-              viewMode === "grid" 
-                ? renderPostCard(post, true, false)
-                : renderPostList(post, true, false)
-            )}
+            {suggestedPosts.map((post) => (viewMode === "grid" ? renderPostCard(post, true, false) : renderPostList(post, true, false)))}
           </div>
         </TabsContent>
       </Tabs>
 
-      <TrainAmbassadorDialog 
-        isOpen={showTrainDialog} 
-        onClose={() => setShowTrainDialog(false)} 
-      />
+      <TrainAmbassadorDialog isOpen={showTrainDialog} onClose={() => setShowTrainDialog(false)} />
 
-      <AccountCreationDialog
-        isOpen={showAccountDialog}
-        onComplete={handleAccountCreationComplete}
-      />
+      <AccountCreationDialog isOpen={showAccountDialog} onComplete={handleAccountCreationComplete} />
 
       <PaymentDialog
         isOpen={showPaymentDialog}
