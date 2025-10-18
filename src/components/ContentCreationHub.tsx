@@ -142,7 +142,8 @@ export default function ContentCreationHub({
       });
       // console.log("generate-image response:", imgRes);
 
-      const imageSrc = extractImageSrc(imgRes);
+      // const imageSrc = extractImageSrc(imgRes);
+      const imageSrc = "https://picsum.photos/600/600"; // temporary image placeholder
       if (!imageSrc) {
         const preview = JSON.stringify(imgRes)?.slice(0, 200);
         throw new Error(`No image found in response. Preview: ${preview}`);
