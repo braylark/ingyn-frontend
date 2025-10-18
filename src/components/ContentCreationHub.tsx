@@ -46,19 +46,30 @@ function BannerBar({ banner, onClose }: { banner: Banner; onClose: () => void })
 }
 
 /* ---------- Helpers to normalize backend responses ---------- */
+// Return a single image src string (URL or data URI) from many shapes
 function extractImageSrc(resp: any): string | null {
   if (!resp) return null;
+
+  // ✅ NEW: top-level array of URLs
+  if (Array.isArray(resp) && resp.length && typeof resp[0] === "string") {
+    return resp[0];
+  }
+
+  // ✅ NEW: top-level string (some backends return a raw URL string)
+  if (typeof resp === "string" && resp.startsWith("http")) {
+    return resp;
+  }
 
   // Common flat shapes
   if (typeof resp.image === "string") return resp.image;
   if (typeof resp.image_url === "string") return resp.image_url;
 
-  // Arrays
+  // Arrays nested inside objects
   if (Array.isArray(resp.images) && resp.images[0]) return resp.images[0];
   if (Array.isArray(resp.image_urls) && resp.image_urls[0]) return resp.image_urls[0];
   if (Array.isArray(resp.urls) && resp.urls[0]) return resp.urls[0];
 
-  // Nested
+  // Nested result/data
   if (resp.result?.image) return resp.result.image;
   if (resp.result?.image_url) return resp.result.image_url;
   if (Array.isArray(resp.result?.images) && resp.result.images[0]) return resp.result.images[0];
@@ -75,6 +86,7 @@ function extractImageSrc(resp: any): string | null {
     const mime = base64.trim().startsWith("/") ? "image/jpeg" : "image/png";
     return `data:${mime};base64,${base64}`;
   }
+
   return null;
 }
 
