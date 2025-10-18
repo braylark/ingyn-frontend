@@ -68,7 +68,7 @@ const ContentCreationHub: React.FC = () => {
 
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
-      notify({ type: "error", msg: "Please enter a prompt to generate content" });
+      notify({ type: "", msg: "Please enter a prompt to generate content" });
       return;
     }
 
@@ -82,7 +82,7 @@ const ContentCreationHub: React.FC = () => {
       const imageSrc = extractImageSrc(imgRes);
       if (!imageSrc) {
         const preview = JSON.stringify(imgRes)?.slice(0, 200);
-        throw new Error(`No image found in response. Preview: ${preview}`);
+        throw new (`No image found in response. Preview: ${preview}`);
       }
 
       // 2) Caption generation (best effort)
@@ -114,7 +114,7 @@ const ContentCreationHub: React.FC = () => {
 
       notify({ type: "success", msg: "Custom post generated! Check 'My Posts'." });
     } catch (e: any) {
-      console.error(e);
+      console.(e);
       notify({ type: "error", msg: e?.message || "Generation failed" });
     } finally {
       setGenerating(false);
