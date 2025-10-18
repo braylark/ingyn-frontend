@@ -38,13 +38,9 @@ function BannerBar({ banner, onClose }: { banner: Banner; onClose: () => void })
       ? "bg-slate-600"
       : "bg-blue-600";
   return (
-    <div
-      className={`${colors} text-white text-sm px-3 py-2 rounded-md mb-3 flex items-center justify-between`}
-    >
+    <div className={`${colors} text-white text-sm px-3 py-2 rounded-md mb-3 flex items-center justify-between`}>
       <span>{banner.msg}</span>
-      <button className="text-white/80 hover:text-white" onClick={onClose}>
-        ×
-      </button>
+      <button className="text-white/80 hover:text-white" onClick={onClose}>×</button>
     </div>
   );
 }
@@ -52,21 +48,24 @@ function BannerBar({ banner, onClose }: { banner: Banner; onClose: () => void })
 /* ---------- Helpers to normalize backend responses ---------- */
 function extractImageSrc(resp: any): string | null {
   if (!resp) return null;
+
+  // Common flat shapes
   if (typeof resp.image === "string") return resp.image;
   if (typeof resp.image_url === "string") return resp.image_url;
 
+  // Arrays
   if (Array.isArray(resp.images) && resp.images[0]) return resp.images[0];
   if (Array.isArray(resp.image_urls) && resp.image_urls[0]) return resp.image_urls[0];
   if (Array.isArray(resp.urls) && resp.urls[0]) return resp.urls[0];
 
+  // Nested
   if (resp.result?.image) return resp.result.image;
   if (resp.result?.image_url) return resp.result.image_url;
-  if (Array.isArray(resp.result?.images) && resp.result.images[0])
-    return resp.result.images[0];
-  if (Array.isArray(resp.result?.urls) && resp.result.urls[0])
-    return resp.result.urls[0];
+  if (Array.isArray(resp.result?.images) && resp.result.images[0]) return resp.result.images[0];
+  if (Array.isArray(resp.result?.urls) && resp.result.urls[0]) return resp.result.urls[0];
   if (resp.data?.image_url) return resp.data.image_url;
 
+  // Base64 blobs (png/jpg/webp)
   const base64 =
     resp.image_base64 ||
     resp.base64 ||
@@ -80,13 +79,7 @@ function extractImageSrc(resp: any): string | null {
 }
 
 function normalizeCaption(resp: any, fallback: string): string {
-  return (
-    resp?.text ||
-    resp?.caption ||
-    resp?.result?.text ||
-    resp?.result?.caption ||
-    `✨ ${fallback}`
-  );
+  return resp?.text || resp?.caption || resp?.result?.text || resp?.result?.caption || `✨ ${fallback}`;
 }
 
 /* ---------- Main Component ---------- */
@@ -118,7 +111,7 @@ export default function ContentCreationHub({
   const notify = (b: Banner) => setBanner(b);
   const clearBanner = () => setBanner(null);
 
-  /* ---------- MAIN GENERATION FUNCTION ---------- */
+  /* ---------- MAIN: prompt-only generation ---------- */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
       notify({ type: "error", msg: "Please enter a prompt to generate content" });
@@ -129,33 +122,40 @@ export default function ContentCreationHub({
     notify({ type: "loading", msg: "Generating image…" });
 
     try {
-      const imgRes: any = await generateImage(customPrompt);
+      // 1) Image generation — prompt-only
+      const imgRes: any = await generateImage(customPrompt, {
+        // Add any defaults your backend accepts; no characterId sent
+        aspect_ratio: "1:1",
+        count: 1,
+      });
+      // console.log("generate-image response:", imgRes);
+
       const imageSrc = extractImageSrc(imgRes);
       if (!imageSrc) {
         const preview = JSON.stringify(imgRes)?.slice(0, 200);
         throw new Error(`No image found in response. Preview: ${preview}`);
       }
 
-      // Caption generation
+      // 2) Caption generation (optional but nice)
       let caption = "";
       try {
         const txtRes: any = await generateText(
-          `Write a short, brand-safe caption for this: ${customPrompt}`
+          `Write a short, brand-safe caption (<=120 words) for this prompt: ${customPrompt}`
         );
+        // console.log("generate-text response:", txtRes);
         caption = normalizeCaption(txtRes, customPrompt);
       } catch {
         caption = `✨ ${customPrompt}`;
       }
 
+      // 3) Create the new post for UI
       const newPost = {
         id: nextId,
         image: imageSrc,
         caption,
         hashtags: ["#Custom", "#AIGenerated", "#YourBrand", "#ContentCreation"],
         predictedReach: `${(Math.random() * 3 + 1).toFixed(1)}K`,
-        bestTime: `${Math.floor(Math.random() * 12 + 1)}:00 ${
-          Math.random() > 0.5 ? "AM" : "PM"
-        }`,
+        bestTime: `${Math.floor(Math.random() * 12 + 1)}:00 ${Math.random() > 0.5 ? "AM" : "PM"}`,
       };
 
       setMyPosts((prev) => [newPost, ...prev]);
@@ -165,10 +165,11 @@ export default function ContentCreationHub({
       notify({ type: "success", msg: "Custom post generated! Check 'My Posts'." });
     } catch (e: any) {
       console.error(e);
+      // If backend still enforces characterId you'll see 422 here; at least it's obvious why.
       notify({ type: "error", msg: e?.message || "Generation failed" });
     } finally {
       setGenerating(false);
-      setTimeout(clearBanner, 3500);
+      setTimeout(clearBanner, 4000);
     }
   };
 
@@ -215,15 +216,13 @@ export default function ContentCreationHub({
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           <h1 className="text-3xl text-[#1E1E1E] mb-2">Create Content</h1>
-          <p className="text-gray-600">
-            AI-powered content suggestions tailored to your audience
-          </p>
+          <p className="text-gray-600">AI-powered content suggestions tailored to your audience</p>
         </div>
       </div>
 
       <BannerBar banner={banner} onClose={clearBanner} />
 
-      {/* Custom Prompt Input */}
+      {/* Prompt-only input */}
       <Card className="p-6 bg-white border-0 rounded-2xl">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -239,7 +238,7 @@ export default function ContentCreationHub({
           <Button
             onClick={handleGenerateCustomPost}
             disabled={generating}
-            className="bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl px-6"
+            className="bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl px-6 disabled:opacity-60"
           >
             <Sparkles className="w-4 h-4 mr-2" />
             {generating ? "Generating…" : "Generate"}
@@ -247,14 +246,11 @@ export default function ContentCreationHub({
         </div>
       </Card>
 
-      {/* My Posts Section */}
+      {/* My Posts */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <TabsList className="bg-gray-100 border border-gray-200">
-            <TabsTrigger
-              value="my-posts"
-              className="data-[state=active]:bg-[#6464B4] data-[state=active]:text-white text-gray-600"
-            >
+            <TabsTrigger value="my-posts" className="data-[state=active]:bg-[#6464B4] data-[state=active]:text-white text-gray-600">
               My Posts {myPosts.length > 0 && `(${myPosts.length})`}
             </TabsTrigger>
           </TabsList>
@@ -263,11 +259,7 @@ export default function ContentCreationHub({
               variant="ghost"
               size="sm"
               onClick={() => setViewMode("grid")}
-              className={`rounded-md ${
-                viewMode === "grid"
-                  ? "bg-[#6464B4] text-white hover:bg-[#6464B4]"
-                  : "text-gray-600 hover:bg-gray-200"
-              }`}
+              className={`rounded-md ${viewMode === "grid" ? "bg-[#6464B4] text-white hover:bg-[#6464B4]" : "text-gray-600 hover:bg-gray-200"}`}
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -275,11 +267,7 @@ export default function ContentCreationHub({
               variant="ghost"
               size="sm"
               onClick={() => setViewMode("list")}
-              className={`rounded-md ${
-                viewMode === "list"
-                  ? "bg-[#6464B4] text-white hover:bg-[#6464B4]"
-                  : "text-gray-600 hover:bg-gray-200"
-              }`}
+              className={`rounded-md ${viewMode === "list" ? "bg-[#6464B4] text-white hover:bg-[#6464B4]" : "text-gray-600 hover:bg-gray-200"}`}
             >
               <List className="w-4 h-4" />
             </Button>
@@ -291,30 +279,18 @@ export default function ContentCreationHub({
             <Card className="p-12 bg-white border border-gray-200 rounded-2xl text-center">
               <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-xl text-[#1E1E1E] mb-2">No posts yet</h3>
-              <p className="text-gray-600 mb-6">
-                Generate custom content using the AI prompt above.
-              </p>
+              <p className="text-gray-600 mb-6">Generate custom content using the AI prompt above.</p>
             </Card>
           ) : (
-            <div
-              className={
-                viewMode === "grid" ? "grid lg:grid-cols-3 gap-6" : "space-y-4"
-              }
-            >
+            <div className={viewMode === "grid" ? "grid lg:grid-cols-3 gap-6" : "space-y-4"}>
               {myPosts.map((post) => (
-                <Card key={post.id} className="bg-white border-0 rounded-2xl">
+                <Card key={post.id} className="bg-white border-0 rounded-2xl overflow-hidden">
                   <div className="w-full aspect-square relative">
-                    <ImageWithFallback
-                      src={post.image}
-                      alt={`Post ${post.id}`}
-                      className="w-full h-full object-cover"
-                    />
+                    <ImageWithFallback src={post.image} alt={`Post ${post.id}`} className="w-full h-full object-cover" />
                     <div className="absolute bottom-3 left-3 right-3 flex gap-2">
                       <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
                         <Heart className="w-4 h-4 text-white" />
-                        <span className="text-white text-sm">
-                          ~{post.predictedReach}
-                        </span>
+                        <span className="text-white text-sm">~{post.predictedReach}</span>
                       </div>
                       <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-[#00D1B2]" />
@@ -325,29 +301,17 @@ export default function ContentCreationHub({
                     <p className="text-sm text-[#1E1E1E]">{post.caption}</p>
                     <div className="flex flex-wrap gap-2">
                       {post.hashtags.map((tag: string, idx: number) => (
-                        <Badge
-                          key={idx}
-                          className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
-                        >
+                        <Badge key={idx} className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs">
                           {tag}
                         </Badge>
                       ))}
                     </div>
                     <div className="flex gap-2 pt-2">
-                      <Button
-                        onClick={() => handleScheduleClick(post.id)}
-                        className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl"
-                        size="sm"
-                      >
+                      <Button onClick={() => handleScheduleClick(post.id)} className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl" size="sm">
                         <Calendar className="w-4 h-4 mr-2" />
                         Schedule
                       </Button>
-                      <Button
-                        onClick={() => handlePostNowClick(post.id)}
-                        variant="outline"
-                        className="flex-1 border-gray-200 rounded-xl"
-                        size="sm"
-                      >
+                      <Button onClick={() => handlePostNowClick(post.id)} variant="outline" className="flex-1 border-gray-200 rounded-xl" size="sm">
                         <Send className="w-4 h-4 mr-2" />
                         Post Now
                       </Button>
@@ -360,14 +324,8 @@ export default function ContentCreationHub({
         </TabsContent>
       </Tabs>
 
-      <TrainAmbassadorDialog
-        isOpen={showTrainDialog}
-        onClose={() => setShowTrainDialog(false)}
-      />
-      <AccountCreationDialog
-        isOpen={showAccountDialog}
-        onComplete={handleAccountCreationComplete}
-      />
+      <TrainAmbassadorDialog isOpen={showTrainDialog} onClose={() => setShowTrainDialog(false)} />
+      <AccountCreationDialog isOpen={showAccountDialog} onComplete={handleAccountCreationComplete} />
       <PaymentDialog
         isOpen={showPaymentDialog}
         onClose={() => {
