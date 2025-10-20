@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -17,6 +17,16 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
 import AccountCreationDialog from "./AccountCreationDialog";
 import PaymentDialog from "./PaymentDialog";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+   ────────────────────────────────────────────────────────────────────────── */
+// Single reference character for all generations (given by you)
+const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
+
+// Backend base: we call relative /api/v1/* and let Vercel proxy to Render.
+// If you prefer an env var, set VITE_API_BASE and prepend it below.
+const API_BASE = ""; // keep empty to use same-origin; Vercel rewrites /api -> Render
 
 /* ──────────────────────────────────────────────────────────────────────────
    Minimal Skeleton with Shimmer (no extra deps)
@@ -55,7 +65,7 @@ interface ContentCreationHubProps {
   onAccountCreated: () => void;
 }
 
-/** Try to verify an image URL is actually loadable by <img>. */
+/** Verify an image URL is actually loadable by <img>. */
 function testImageLoad(url: string, timeoutMs = 10000): Promise<void> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -82,7 +92,7 @@ function testImageLoad(url: string, timeoutMs = 10000): Promise<void> {
   });
 }
 
-/** Poll until an image URL becomes loadable (if backend posts a URL before file exists). */
+/** Poll until an image URL becomes loadable (if provider posts URL before file exists). */
 async function waitForImageReady(url: string, maxWaitMs = 60000, intervalMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
@@ -94,6 +104,69 @@ async function waitForImageReady(url: string, maxWaitMs = 60000, intervalMs = 20
     }
   }
   throw new Error("image not ready after wait");
+}
+
+/** Normalize backend image response */
+function extractImageUrl(data: any): string | null {
+  if (!data) return null;
+  // Preferred normalized shape: { images: [{ url }] }
+  const arr = data.images;
+  if (Array.isArray(arr) && arr.length) {
+    const first = arr[0];
+    if (first && typeof first.url === "string") return first.url;
+    if (typeof first === "string") return first; // fallback
+  }
+  // Fallbacks if backend returns plain array
+  if (Array.isArray(data) && typeof data[0] === "string") return data[0];
+  // Last resort: common keys
+  if (typeof data.url === "string") return data.url;
+  return null;
+}
+
+/** Normalize caption/text response */
+function extractText(data: any): string {
+  if (!data) return "";
+  if (typeof data.text === "string") return data.text;
+  if (typeof data.result === "string") return data.result;
+  return "";
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Backend calls
+   ────────────────────────────────────────────────────────────────────────── */
+async function generateImage(prompt: string, options?: { aspect_ratio?: string; count?: number }) {
+  const body = {
+    prompt,
+    aspect_ratio: options?.aspect_ratio || "1:1",
+    count: options?.count ?? 1,
+    characterId: CHARACTER_ID, // <— IMPORTANT: always include your reference character
+  };
+  const res = await fetch(`${API_BASE}/api/v1/generate-image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(`HTTP ${res.status}: ${msg}`);
+  }
+  return res.json();
+}
+
+async function generateCaption(prompt: string) {
+  const gptPrompt =
+    `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
+    `Include 3–6 relevant hashtags at the end.\n\nTopic: ${prompt}`;
+  const res = await fetch(`${API_BASE}/api/v1/generate-text`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: gptPrompt, characterId: CHARACTER_ID }),
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(`HTTP ${res.status}: ${msg}`);
+  }
+  return res.json();
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -120,17 +193,11 @@ export default function ContentCreationHub({
 
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
-  /* ── TEMP PLACEHOLDER (for demo while backend is being wired) ──────────── */
-  // This proves the full UI loop with a real image. Replace when your backend
-  // returns a valid, publicly loadable URL.
-  const imageSrc = "https://picsum.photos/600/600"; // temporary image placeholder
-
   /* ────────────────────────────────────────────────────────────────────────
      Generate: optimistic post + skeleton → swap to image when ready
      ──────────────────────────────────────────────────────────────────────── */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
-      // Keep it simple: highlight the input
       promptRef.current?.focus();
       return;
     }
@@ -141,7 +208,7 @@ export default function ContentCreationHub({
     const optimisticId = nextId;
     const optimisticPost: PostItem = {
       id: optimisticId,
-      image: "", // no image yet
+      image: "",
       caption: "Generating…",
       status: "processing",
       hashtags: ["#Generating"],
@@ -154,48 +221,46 @@ export default function ContentCreationHub({
     setActiveTab("my-posts");
 
     try {
-      // ── TODO (LATER): Call your backend here to generate image from the prompt ─────────
-       const imgRes = await generateImage(customPrompt, { aspect_ratio: "1:1", count: 1 });
-       const finalUrl = extractImageSrc(imgRes);
-       if (!finalUrl) throw new Error("No image returned");
-       await waitForImageReady(finalUrl, 60000, 2000);
+      // 2) Call backend: image
+      const imgRes = await generateImage(customPrompt, { aspect_ratio: "1:1", count: 1 });
+      const imageUrl = extractImageUrl(imgRes);
+      if (!imageUrl) throw new Error("No image URL returned from backend");
 
-      // For now we simulate the same experience using a public placeholder image.
-      //const finalUrl = imageSrc;
+      // Wait until image is actually retrievable by the browser
       try {
-        await waitForImageReady(finalUrl, 15000, 1500);
+        await waitForImageReady(imageUrl, 60000, 2000);
       } catch {
-        // If a public placeholder ever fails (unlikely), keep processing and retry in bg
+        // If the provider returns an URL before it’s live, we keep the card "processing"
+        // and background-retry below.
       }
 
-      // ── TODO (LATER): Optional caption generation via backend ─────────────
-      // const txtRes = await generateText(`Write a caption for: ${customPrompt}`);
-      // const caption = normalizeCaption(txtRes, customPrompt);
-      const caption = `✨ ${customPrompt}`;
+      // 3) Call backend: caption (best effort)
+      let caption = `✨ ${customPrompt}`;
+      try {
+        const txtRes = await generateCaption(customPrompt);
+        const text = extractText(txtRes);
+        if (text) caption = text;
+      } catch {
+        // ignore text errors; keep fallback caption
+      }
 
-      // 2) Update the optimistic post with real data
+      // 4) Update the optimistic post with real data (mark ready if loadable)
       let status: PostStatus = "ready";
       setMyPosts((prev) =>
-        prev.map((p) =>
-          p.id === optimisticId ? { ...p, image: finalUrl, caption, status } : p
-        )
+        prev.map((p) => (p.id === optimisticId ? { ...p, image: imageUrl, caption, status } : p))
       );
 
-      // 3) If we ever left it "processing", retry in background and flip to ready
+      // 5) If still not loadable, background wait and flip to ready/failed
       if (status === "processing") {
         (async () => {
           try {
-            await waitForImageReady(finalUrl, 60000, 2000);
+            await waitForImageReady(imageUrl, 60000, 2000);
             setMyPosts((prev) =>
-              prev.map((p) =>
-                p.id === optimisticId ? { ...p, status: "ready" } : p
-              )
+              prev.map((p) => (p.id === optimisticId ? { ...p, status: "ready" } : p))
             );
           } catch {
             setMyPosts((prev) =>
-              prev.map((p) =>
-                p.id === optimisticId ? { ...p, status: "failed" } : p
-              )
+              prev.map((p) => (p.id === optimisticId ? { ...p, status: "failed" } : p))
             );
           }
         })();
@@ -225,7 +290,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // later: call your scheduler; for demo we just no-op
+      // TODO: integrate scheduler
     }
   };
 
@@ -235,7 +300,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // later: call social posting; for demo we just no-op
+      // TODO: integrate direct posting
     }
   };
 
@@ -364,7 +429,6 @@ export default function ContentCreationHub({
                             <button
                               className="text-white/90 text-xs bg-black/50 rounded px-2 py-1"
                               onClick={() => {
-                                // simple retry UX: push the caption back into the prompt box
                                 const seed =
                                   post.caption?.replace(/^✨\s?/, "") || "";
                                 setCustomPrompt(seed);
