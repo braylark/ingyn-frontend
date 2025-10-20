@@ -155,13 +155,13 @@ export default function ContentCreationHub({
 
     try {
       // ── TODO (LATER): Call your backend here to generate image from the prompt ─────────
-      // const imgRes = await generateImage(customPrompt, { aspect_ratio: "1:1", count: 1 });
-      // const finalUrl = extractImageSrc(imgRes);
-      // if (!finalUrl) throw new Error("No image returned");
-      // await waitForImageReady(finalUrl, 60000, 2000);
+       const imgRes = await generateImage(customPrompt, { aspect_ratio: "1:1", count: 1 });
+       const finalUrl = extractImageSrc(imgRes);
+       if (!finalUrl) throw new Error("No image returned");
+       await waitForImageReady(finalUrl, 60000, 2000);
 
       // For now we simulate the same experience using a public placeholder image.
-      const finalUrl = imageSrc;
+      //const finalUrl = imageSrc;
       try {
         await waitForImageReady(finalUrl, 15000, 1500);
       } catch {
