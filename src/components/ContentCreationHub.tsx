@@ -21,32 +21,16 @@ import PaymentDialog from "./PaymentDialog";
 /* ──────────────────────────────────────────────────────────────────────────
    CONSTANTS
    ────────────────────────────────────────────────────────────────────────── */
-// Single reference character for all generations (given by you)
+
+// This is the ID you're passing to the backend so Higgsfield can keep the same look
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
 
-// Backend base: we call relative /api/v1/* and let Vercel proxy to Render.
-// If you prefer an env var, set VITE_API_BASE and prepend it below.
-const API_BASE = ""; // keep empty to use same-origin; Vercel rewrites /api -> Render
+// If you're proxying through Vercel to Render, leave this as "" so it hits same-origin.
+// If you run local FastAPI at http://localhost:8000, set API_BASE = "http://localhost:8000"
+const API_BASE = "";
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Minimal Skeleton with Shimmer (no extra deps)
-   ────────────────────────────────────────────────────────────────────────── */
-function Skeleton({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`relative overflow-hidden bg-gray-200/80 rounded-lg ${className}`}
-      aria-busy="true"
-      aria-live="polite"
-      role="status"
-    >
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-      <style>{`@keyframes shimmer { 100% { transform: translateX(100%); } }`}</style>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
-   Types & Helpers
+   Types
    ────────────────────────────────────────────────────────────────────────── */
 type PostStatus = "processing" | "ready" | "failed";
 
@@ -65,108 +49,83 @@ interface ContentCreationHubProps {
   onAccountCreated: () => void;
 }
 
-/** Verify an image URL is actually loadable by <img>. */
-function testImageLoad(url: string, timeoutMs = 10000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error("timeout"));
-    }, timeoutMs);
-    function cleanup() {
-      clearTimeout(timer);
-      img.onload = null;
-      img.onerror = null;
-    }
-    img.onload = () => {
-      cleanup();
-      resolve();
-    };
-    img.onerror = () => {
-      cleanup();
-      reject(new Error("img error"));
-    };
-    img.crossOrigin = "anonymous";
-    img.referrerPolicy = "no-referrer";
-    img.src = url;
-  });
-}
-
-/** Poll until an image URL becomes loadable (if provider posts URL before file exists). */
-async function waitForImageReady(url: string, maxWaitMs = 60000, intervalMs = 2000) {
-  const start = Date.now();
-  while (Date.now() - start < maxWaitMs) {
-    try {
-      await testImageLoad(url, 7000);
-      return;
-    } catch {
-      await new Promise((r) => setTimeout(r, intervalMs));
-    }
-  }
-  throw new Error("image not ready after wait");
-}
-
-/** Normalize backend image response */
-function extractImageUrl(data: any): string | null {
-  if (!data) return null;
-  // Preferred normalized shape: { images: [{ url }] }
-  const arr = data.images;
-  if (Array.isArray(arr) && arr.length) {
-    const first = arr[0];
-    if (first && typeof first.url === "string") return first.url;
-    if (typeof first === "string") return first; // fallback
-  }
-  // Fallbacks if backend returns plain array
-  if (Array.isArray(data) && typeof data[0] === "string") return data[0];
-  // Last resort: common keys
-  if (typeof data.url === "string") return data.url;
-  return null;
-}
-
-/** Normalize caption/text response */
-function extractText(data: any): string {
-  if (!data) return "";
-  if (typeof data.text === "string") return data.text;
-  if (typeof data.result === "string") return data.result;
-  return "";
+/* ──────────────────────────────────────────────────────────────────────────
+   Minimal Skeleton
+   ────────────────────────────────────────────────────────────────────────── */
+function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`relative overflow-hidden bg-gray-200/80 rounded-lg ${className}`}
+      aria-busy="true"
+      aria-live="polite"
+      role="status"
+    >
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+      <style>{`@keyframes shimmer { 100% { transform: translateX(100%); } }`}</style>
+    </div>
+  );
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
    Backend calls
    ────────────────────────────────────────────────────────────────────────── */
-async function generateImage(prompt: string, options?: { aspect_ratio?: string; count?: number }) {
+
+/**
+ * Calls FastAPI /api/v1/generate-image
+ * Expects backend to return:
+ * {
+ *   "image_urls": ["https://...","https://..."],
+ *   "caption": "optional"
+ * }
+ */
+async function generateImageFromBackend(prompt: string) {
   const body = {
     prompt,
-    aspect_ratio: options?.aspect_ratio || "1:1",
-    count: options?.count ?? 1,
-    characterId: CHARACTER_ID, // <— IMPORTANT: always include your reference character
+    characterId: CHARACTER_ID,
   };
+
   const res = await fetch(`${API_BASE}/api/v1/generate-image`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
   if (!res.ok) {
     const msg = await res.text();
     throw new Error(`HTTP ${res.status}: ${msg}`);
   }
+
   return res.json();
 }
 
-async function generateCaption(prompt: string) {
+/**
+ * Calls FastAPI /api/v1/generate-text
+ * Your backend returns plain text:
+ *   return res['candidates'][0]['content']['parts'][0]['text']
+ * So the response is just a string, NOT an object.
+ */
+async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
     `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
-    `Include 3–6 relevant hashtags at the end.\n\nTopic: ${prompt}`;
+    `Include 3–6 relevant hashtags at the end.\n\nTopic: ${topicPrompt}`;
+
   const res = await fetch(`${API_BASE}/api/v1/generate-text`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: gptPrompt, characterId: CHARACTER_ID }),
+    body: JSON.stringify({
+      prompt: gptPrompt,
+      characterId: CHARACTER_ID,
+    }),
   });
+
   if (!res.ok) {
     const msg = await res.text();
     throw new Error(`HTTP ${res.status}: ${msg}`);
   }
-  return res.json();
+
+  // backend returns raw text, not {text: "..."}
+  const data = await res.json();
+  return typeof data === "string" ? data : "";
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -176,25 +135,35 @@ export default function ContentCreationHub({
   hasAccount,
   onAccountCreated,
 }: ContentCreationHubProps) {
+  // user input prompt
   const [customPrompt, setCustomPrompt] = useState("");
+
+  // loading state while we call backend
   const [generating, setGenerating] = useState(false);
 
+  // generated posts we show in UI
   const [myPosts, setMyPosts] = useState<PostItem[]>([]);
   const [nextId, setNextId] = useState(100);
+
+  // ui state
   const [activeTab, setActiveTab] = useState("my-posts");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
+  // dialogs
   const [showTrainDialog, setShowTrainDialog] = useState(false);
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  const [pendingAction, setPendingAction] = useState<"schedule" | "post" | null>(null);
+  // schedule/post actions
+  const [pendingAction, setPendingAction] = useState<"schedule" | "post" | null>(
+    null
+  );
   const [pendingPostId, setPendingPostId] = useState<number | null>(null);
 
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
   /* ────────────────────────────────────────────────────────────────────────
-     Generate: optimistic post + skeleton → swap to image when ready
+     Generate new post flow
      ──────────────────────────────────────────────────────────────────────── */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
@@ -204,7 +173,7 @@ export default function ContentCreationHub({
 
     setGenerating(true);
 
-    // 1) Create an optimistic "processing" post immediately (renders skeleton)
+    // 1. Create optimistic/skeleton card first
     const optimisticId = nextId;
     const optimisticPost: PostItem = {
       id: optimisticId,
@@ -221,58 +190,59 @@ export default function ContentCreationHub({
     setActiveTab("my-posts");
 
     try {
-      // 2) Call backend: image
-      const imgRes = await generateImage(customPrompt, { aspect_ratio: "1:1", count: 1 });
-      const imageUrl = extractImageUrl(imgRes);
-      if (!imageUrl) throw new Error("No image URL returned from backend");
+      // 2. Ask backend for image(s)
+      const imageResponse = await generateImageFromBackend(customPrompt);
+      // image_urls is an array of full https:// URLs from Higgsfield
+      const firstImageUrl =
+        Array.isArray(imageResponse?.image_urls) &&
+        imageResponse.image_urls.length > 0
+          ? imageResponse.image_urls[0]
+          : "";
 
-      // Wait until image is actually retrievable by the browser
+      if (!firstImageUrl) {
+        throw new Error("No image URLs returned from backend");
+      }
+
+      // 3. Ask backend for caption text (best effort)
+      let finalCaption = `✨ ${customPrompt}`;
       try {
-        await waitForImageReady(imageUrl, 60000, 2000);
+        const cap = await generateCaptionFromBackend(customPrompt);
+        if (cap && typeof cap === "string") {
+          finalCaption = cap;
+        }
       } catch {
-        // If the provider returns an URL before it’s live, we keep the card "processing"
-        // and background-retry below.
+        // if caption gen fails we just keep fallback
       }
 
-      // 3) Call backend: caption (best effort)
-      let caption = `✨ ${customPrompt}`;
-      try {
-        const txtRes = await generateCaption(customPrompt);
-        const text = extractText(txtRes);
-        if (text) caption = text;
-      } catch {
-        // ignore text errors; keep fallback caption
-      }
-
-      // 4) Update the optimistic post with real data (mark ready if loadable)
-      let status: PostStatus = "ready";
-      setMyPosts((prev) =>
-        prev.map((p) => (p.id === optimisticId ? { ...p, image: imageUrl, caption, status } : p))
-      );
-
-      // 5) If still not loadable, background wait and flip to ready/failed
-      if (status === "processing") {
-        (async () => {
-          try {
-            await waitForImageReady(imageUrl, 60000, 2000);
-            setMyPosts((prev) =>
-              prev.map((p) => (p.id === optimisticId ? { ...p, status: "ready" } : p))
-            );
-          } catch {
-            setMyPosts((prev) =>
-              prev.map((p) => (p.id === optimisticId ? { ...p, status: "failed" } : p))
-            );
-          }
-        })();
-      }
-
-      setCustomPrompt("");
-    } catch (e) {
-      // If generation failed outright, mark as failed
+      // 4. Update that optimistic card with final data
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
-            ? { ...p, status: "failed", caption: "Generation failed" }
+            ? {
+                ...p,
+                image: firstImageUrl,
+                caption: finalCaption,
+                status: "ready",
+                hashtags: extractHashtagsFromCaption(finalCaption),
+                predictedReach: estimateReach(),
+                bestTime: suggestBestTime(),
+              }
+            : p
+        )
+      );
+
+      // clear the textarea
+      setCustomPrompt("");
+    } catch (err) {
+      // if anything failed, mark that optimistic card as failed
+      setMyPosts((prev) =>
+        prev.map((p) =>
+          p.id === optimisticId
+            ? {
+                ...p,
+                status: "failed",
+                caption: "Generation failed",
+              }
             : p
         )
       );
@@ -280,6 +250,29 @@ export default function ContentCreationHub({
       setGenerating(false);
     }
   };
+
+  /* ────────────────────────────────────────────────────────────────────────
+     Helpers to fake metrics (reach/time/hashtags)
+     You can replace these with real logic later.
+     ──────────────────────────────────────────────────────────────────────── */
+  function extractHashtagsFromCaption(caption: string): string[] {
+    if (!caption) return [];
+    // super simple split to pull out words that START with '#'
+    const words = caption.split(/\s+/);
+    const tags = words.filter((w) => w.trim().startsWith("#"));
+    // limit to like 6 for display
+    return tags.slice(0, 6);
+  }
+
+  function estimateReach() {
+    // placeholder until you have analytics
+    return "12.4k est reach";
+  }
+
+  function suggestBestTime() {
+    // placeholder until you have analytics
+    return "Tue 7:30 PM";
+  }
 
   /* ────────────────────────────────────────────────────────────────────────
      Post actions (Schedule / Post Now)
@@ -337,6 +330,7 @@ export default function ContentCreationHub({
             <Sparkles className="w-5 h-5 text-[#6464B4]" />
             <h3 className="text-[#1E1E1E]">Generate Custom Content</h3>
           </div>
+
           <Textarea
             ref={promptRef}
             placeholder="Describe the post you want to create..."
@@ -344,6 +338,7 @@ export default function ContentCreationHub({
             onChange={(e) => setCustomPrompt(e.target.value)}
             className="rounded-xl border-gray-200 min-h-[80px]"
           />
+
           <Button
             onClick={handleGenerateCustomPost}
             disabled={generating}
@@ -366,6 +361,7 @@ export default function ContentCreationHub({
               My Posts {myPosts.length > 0 && `(${myPosts.length})`}
             </TabsTrigger>
           </TabsList>
+
           <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-lg p-1">
             <Button
               variant="ghost"
@@ -379,6 +375,7 @@ export default function ContentCreationHub({
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
+
             <Button
               variant="ghost"
               size="sm"
@@ -425,6 +422,7 @@ export default function ContentCreationHub({
                               ? "Generating…"
                               : "Failed"}
                           </span>
+
                           {post.status === "failed" && (
                             <button
                               className="text-white/90 text-xs bg-black/50 rounded px-2 py-1"
@@ -472,6 +470,7 @@ export default function ContentCreationHub({
                   {/* Meta, caption, actions */}
                   <div className="p-4 space-y-4">
                     <p className="text-sm text-[#1E1E1E]">{post.caption}</p>
+
                     <div className="flex flex-wrap gap-2">
                       {post.hashtags.map((tag, idx) => (
                         <Badge
@@ -482,6 +481,7 @@ export default function ContentCreationHub({
                         </Badge>
                       ))}
                     </div>
+
                     <div className="flex gap-2 pt-2">
                       <Button
                         onClick={() => handleScheduleClick(post.id)}
@@ -492,6 +492,7 @@ export default function ContentCreationHub({
                         <Calendar className="w-4 h-4 mr-2" />
                         Schedule
                       </Button>
+
                       <Button
                         onClick={() => handlePostNowClick(post.id)}
                         disabled={post.status !== "ready"}
@@ -511,15 +512,17 @@ export default function ContentCreationHub({
         </TabsContent>
       </Tabs>
 
-      {/* Dialogs (unchanged) */}
+      {/* Dialogs */}
       <TrainAmbassadorDialog
         isOpen={showTrainDialog}
         onClose={() => setShowTrainDialog(false)}
       />
+
       <AccountCreationDialog
         isOpen={showAccountDialog}
         onComplete={handleAccountCreationComplete}
       />
+
       <PaymentDialog
         isOpen={showPaymentDialog}
         onClose={() => {
