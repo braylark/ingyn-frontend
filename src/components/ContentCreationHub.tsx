@@ -12,26 +12,23 @@ import {
   Heart,
   LayoutGrid,
   List,
-  Loader2, // spinner icon
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
 import AccountCreationDialog from "./AccountCreationDialog";
 import PaymentDialog from "./PaymentDialog";
 
-/* ──────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────
    CONSTANTS
-   ────────────────────────────────────────────────────────────────────────── */
-
-// reference character id for backend
+   ───────────────────────────────────────── */
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
+const API_BASE = ""; // same-origin proxy to backend
 
-// keep "" if you're proxying /api on the same origin (Netlify -> Render)
-const API_BASE = "";
-
-/* ──────────────────────────────────────────────────────────────────────────
-   Types
-   ────────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────
+   TYPES
+   ───────────────────────────────────────── */
 type PostStatus = "processing" | "ready" | "failed";
 
 interface PostItem {
@@ -49,59 +46,78 @@ interface ContentCreationHubProps {
   onAccountCreated: () => void;
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Skeleton + LoadingCard
-   - We’re making a “visual loading state” with shimmer + spinner + overlay text
-   ────────────────────────────────────────────────────────────────────────── */
-function ShimmerBox({ className = "" }: { className?: string }) {
+/* ─────────────────────────────────────────
+   LOADING + FAILED VISUALS
+   ───────────────────────────────────────── */
+
+/**
+ * Trendy "AI cooking" block:
+ * - Dark gradient
+ * - Blurred glow ring pulse
+ * - Centered spinner + label
+ *
+ * We use this in BOTH grid and list modes while status === "processing".
+ */
+function GeneratingBlock() {
   return (
-    <div
-      className={`relative overflow-hidden bg-gray-200/80 rounded-lg ${className}`}
-      aria-busy="true"
-      aria-live="polite"
-      role="status"
-    >
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-      <style>{`@keyframes shimmer { 100% { transform: translateX(100%); } }`}</style>
+    <div className="relative w-full h-full rounded-xl bg-gradient-to-br from-[#1a1a2f] via-[#2a235a] to-[#000000] flex items-center justify-center overflow-hidden">
+      {/* soft animated glow ring */}
+      <div className="absolute w-40 h-40 rounded-full bg-[radial-gradient(circle_at_center,rgba(100,100,180,0.5),transparent_70%)] blur-2xl animate-pulse opacity-60" />
+      {/* spinner + text */}
+      <div className="relative z-[2] flex flex-col items-center text-white text-xs font-medium">
+        <div className="flex items-center gap-2 bg-black/50 rounded-full px-3 py-1 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md">
+          <Loader2 className="w-4 h-4 animate-spin text-white" />
+          <span>Generating…</span>
+        </div>
+        <div className="text-[10px] text-white/50 mt-2 tracking-wide uppercase">
+          AI is creating your post
+        </div>
+      </div>
+
+      {/* subtle noise overlay */}
+      <div className="absolute inset-0 opacity-[0.15] mix-blend-screen pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.2) 0%, transparent 60%)",
+        }}
+      />
     </div>
   );
 }
 
 /**
- * This is the visual that shows while post.status === "processing"
- * - For grid view, it fills a square
- * - For list view, we’ll reuse a thumbnail version
+ * Failure block:
+ * Dark block with retry CTA.
+ * No caption/hashtags/buttons shown in failed state.
  */
-function GeneratingVisual({
-  label = "Generating…",
-  variant = "square", // "square" | "thumb"
-}: {
-  label?: string;
-  variant?: "square" | "thumb";
-}) {
-  const baseClasses =
-    variant === "thumb"
-      ? "w-full h-full rounded-lg overflow-hidden bg-black/5 relative flex items-center justify-center"
-      : "w-full h-full rounded-lg overflow-hidden bg-black/5 relative flex items-center justify-center";
-
+function FailedBlock({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className={baseClasses}>
-      <ShimmerBox className="absolute inset-0" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-xs font-medium">
-          <Loader2 className="w-4 h-4 animate-spin text-white" />
-          <span>{label}</span>
+    <div className="relative w-full h-full rounded-xl bg-gradient-to-br from-[#2b1a1a] via-[#3a1f1f] to-[#000] flex items-center justify-center overflow-hidden">
+      <div className="relative z-[2] flex flex-col items-center text-white text-xs font-medium space-y-2">
+        <div className="flex items-center gap-2 bg-black/60 rounded-full px-3 py-1 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md">
+          <RefreshCw className="w-4 h-4 text-white" />
+          <span>Generation failed</span>
         </div>
+        <button
+          className="text-[11px] text-white/80 underline hover:text-white"
+          onClick={onRetry}
+        >
+          Try again
+        </button>
       </div>
+      <div className="absolute inset-0 opacity-[0.1] mix-blend-screen pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.3) 0%, transparent 60%)",
+        }}
+      />
     </div>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Backend calls
-   ────────────────────────────────────────────────────────────────────────── */
-
-// GET IMAGE URLS FROM BACKEND
+/* ─────────────────────────────────────────
+   BACKEND CALLS
+   ───────────────────────────────────────── */
 async function generateImageFromBackend(prompt: string) {
   const body = {
     prompt,
@@ -122,7 +138,6 @@ async function generateImageFromBackend(prompt: string) {
   return res.json();
 }
 
-// GET CAPTION/TEXT FROM BACKEND
 async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
     `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
@@ -146,9 +161,9 @@ async function generateCaptionFromBackend(topicPrompt: string) {
   return typeof data === "string" ? data : "";
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Helper display metadata
-   ────────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────
+   POST HELPERS
+   ───────────────────────────────────────── */
 function extractHashtagsFromCaption(caption: string): string[] {
   if (!caption) return [];
   const words = caption.split(/\s+/);
@@ -164,33 +179,26 @@ function suggestBestTime() {
   return "Tue 7:30 PM";
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Component
-   ────────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────
+   COMPONENT
+   ───────────────────────────────────────── */
 export default function ContentCreationHub({
   hasAccount,
   onAccountCreated,
 }: ContentCreationHubProps) {
-  // prompt input
   const [customPrompt, setCustomPrompt] = useState("");
-
-  // loading the generation request
   const [generating, setGenerating] = useState(false);
 
-  // posts feed
   const [myPosts, setMyPosts] = useState<PostItem[]>([]);
   const [nextId, setNextId] = useState(100);
 
-  // view/UI state
   const [activeTab, setActiveTab] = useState("my-posts");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
-  // dialogs
   const [showTrainDialog, setShowTrainDialog] = useState(false);
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  // pending action (schedule/post)
   const [pendingAction, setPendingAction] = useState<"schedule" | "post" | null>(
     null
   );
@@ -198,9 +206,9 @@ export default function ContentCreationHub({
 
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
-  /* ────────────────────────────────────────────────────────────────────────
-     Generate new post (optimistic skeleton → final)
-     ──────────────────────────────────────────────────────────────────────── */
+  /* ─────────────────────────────────────────
+     GENERATE POST
+     ───────────────────────────────────────── */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
       promptRef.current?.focus();
@@ -209,14 +217,14 @@ export default function ContentCreationHub({
 
     setGenerating(true);
 
-    // optimistic "processing" card
+    // optimistic card: status "processing", minimal info only
     const optimisticId = nextId;
     const optimisticPost: PostItem = {
       id: optimisticId,
       image: "",
-      caption: "Generating…",
+      caption: "", // don't show placeholder text now
       status: "processing",
-      hashtags: ["#Generating"],
+      hashtags: [],
       predictedReach: "—",
       bestTime: "—",
     };
@@ -226,7 +234,7 @@ export default function ContentCreationHub({
     setActiveTab("my-posts");
 
     try {
-      // 1. request image(s)
+      // 1. get image urls
       const imageResponse = await generateImageFromBackend(customPrompt);
       const firstImageUrl =
         Array.isArray(imageResponse?.image_urls) &&
@@ -238,18 +246,18 @@ export default function ContentCreationHub({
         throw new Error("No image URLs returned from backend");
       }
 
-      // 2. request caption
-      let finalCaption = `✨ ${customPrompt}`;
+      // 2. get caption
+      let finalCaption = "";
       try {
         const cap = await generateCaptionFromBackend(customPrompt);
         if (cap && typeof cap === "string") {
           finalCaption = cap;
         }
       } catch {
-        // ignore, fallback caption is ok
+        finalCaption = ""; // silent fail okay
       }
 
-      // 3. finish card
+      // 3. finalize card
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
@@ -266,17 +274,17 @@ export default function ContentCreationHub({
         )
       );
 
-      // clear prompt box
       setCustomPrompt("");
     } catch (err) {
-      // mark as failed
+      // failed state (still hide body, but show retry visual)
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
             ? {
                 ...p,
                 status: "failed",
-                caption: "Generation failed",
+                caption: "",
+                hashtags: [],
               }
             : p
         )
@@ -286,16 +294,16 @@ export default function ContentCreationHub({
     }
   };
 
-  /* ────────────────────────────────────────────────────────────────────────
-     Post actions
-     ──────────────────────────────────────────────────────────────────────── */
+  /* ─────────────────────────────────────────
+     ACTION BUTTON HANDLERS
+     ───────────────────────────────────────── */
   const handleScheduleClick = (postId: number) => {
     if (!hasAccount) {
       setPendingAction("schedule");
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // TODO hook scheduler
+      // TODO
     }
   };
 
@@ -305,7 +313,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // TODO hook posting API
+      // TODO
     }
   };
 
@@ -321,125 +329,151 @@ export default function ContentCreationHub({
     setPendingPostId(null);
   };
 
-  /* ────────────────────────────────────────────────────────────────────────
-     Card Render Helpers
-     ──────────────────────────────────────────────────────────────────────── */
+  /* ─────────────────────────────────────────
+     RENDER HELPERS
+     ───────────────────────────────────────── */
 
-  // IMAGE BLOCK for grid view (square style)
-  const renderGridImageBlock = (post: PostItem) => {
+  /**
+   * GRID IMAGE AREA (square card)
+   * - processing: GeneratingBlock only
+   * - failed: FailedBlock only
+   * - ready: actual image + overlay stats
+   */
+  const GridVisual = (post: PostItem) => {
+    const onRetry = () => {
+      const seed = post.caption?.replace(/^✨\s?/, "") || "";
+      setCustomPrompt(seed);
+      document
+        .querySelector("textarea")
+        ?.scrollIntoView({ behavior: "smooth" });
+      promptRef.current?.focus();
+    };
+
+    if (post.status === "processing") {
+      return (
+        <div className="w-full aspect-square relative">
+          <GeneratingBlock />
+        </div>
+      );
+    }
+
+    if (post.status === "failed") {
+      return (
+        <div className="w-full aspect-square relative">
+          <FailedBlock onRetry={onRetry} />
+        </div>
+      );
+    }
+
+    // ready
     return (
       <div className="w-full aspect-square relative">
-        {post.status === "ready" ? (
-          <>
-            <ImageWithFallback
-              src={post.image}
-              alt={`Post ${post.id}`}
-              className="w-full h-full object-cover rounded-lg"
-              crossOrigin="anonymous"
-              referrerPolicy="no-referrer"
-            />
+        <ImageWithFallback
+          src={post.image}
+          alt={`Post ${post.id}`}
+          className="w-full h-full object-cover rounded-xl"
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
+        />
 
-            {/* overlay stats */}
-            <div className="absolute bottom-3 left-3 right-3 flex gap-2">
-              <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
-                <Heart className="w-4 h-4 text-white" />
-                <span className="text-white text-sm">
-                  ~{post.predictedReach}
-                </span>
-              </div>
-              <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[#00D1B2]" />
-              </div>
-            </div>
-          </>
-        ) : post.status === "processing" ? (
-          <GeneratingVisual label="Generating…" variant="square" />
-        ) : (
-          // failed
-          <div className="w-full h-full relative">
-            <ShimmerBox className="w-full h-full rounded-lg" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-xs font-medium text-white">
-                <span>Failed</span>
-                <button
-                  className="underline text-white"
-                  onClick={() => {
-                    const seed = post.caption?.replace(/^✨\s?/, "") || "";
-                    setCustomPrompt(seed);
-                    document
-                      .querySelector("textarea")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                    promptRef.current?.focus();
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
+        <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+          <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
+            <Heart className="w-4 h-4 text-white" />
+            <span className="text-white text-sm">~{post.predictedReach}</span>
           </div>
-        )}
+          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-[#00D1B2]" />
+          </div>
+        </div>
       </div>
     );
   };
 
-  // IMAGE BLOCK for list view (thumbnail style left column)
-  const renderListImageBlock = (post: PostItem) => {
+  /**
+   * LIST IMAGE AREA (left thumb)
+   * fixed 200x200, object-cover
+   */
+  const ListThumb = (post: PostItem) => {
+    const onRetry = () => {
+      const seed = post.caption?.replace(/^✨\s?/, "") || "";
+      setCustomPrompt(seed);
+      document
+        .querySelector("textarea")
+        ?.scrollIntoView({ behavior: "smooth" });
+      promptRef.current?.focus();
+    };
+
+    if (post.status === "processing") {
+      return (
+        <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0">
+          <GeneratingBlock />
+        </div>
+      );
+    }
+
+    if (post.status === "failed") {
+      return (
+        <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0">
+          <FailedBlock onRetry={onRetry} />
+        </div>
+      );
+    }
+
+    // ready
     return (
-      <div className="w-full max-w-[140px] aspect-square flex-shrink-0 relative rounded-lg overflow-hidden">
-        {post.status === "ready" ? (
-          <ImageWithFallback
-            src={post.image}
-            alt={`Post ${post.id}`}
-            className="w-full h-full object-cover"
-            crossOrigin="anonymous"
-            referrerPolicy="no-referrer"
-          />
-        ) : post.status === "processing" ? (
-          <GeneratingVisual label="Generating…" variant="thumb" />
-        ) : (
-          <div className="w-full h-full relative">
-            <ShimmerBox className="w-full h-full rounded-lg" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px] font-medium text-white">
-                <span>Failed</span>
-                <button
-                  className="underline text-white"
-                  onClick={() => {
-                    const seed = post.caption?.replace(/^✨\s?/, "") || "";
-                    setCustomPrompt(seed);
-                    document
-                      .querySelector("textarea")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                    promptRef.current?.focus();
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+      <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 relative">
+        <ImageWithFallback
+          src={post.image}
+          alt={`Post ${post.id}`}
+          className="w-full h-full object-cover"
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 flex items-center gap-1">
+          <Heart className="w-3 h-3 text-white" />
+          <span className="text-[11px] text-white leading-none">
+            ~{post.predictedReach}
+          </span>
+        </div>
       </div>
     );
   };
 
-  // RIGHT SIDE CONTENT for list view
-  const renderListTextBlock = (post: PostItem) => {
+  /**
+   * LIST RIGHT SIDE CONTENT
+   * Only render caption / hashtags / buttons when READY.
+   * When processing or failed: render nothing here.
+   */
+  const ListBody = (post: PostItem) => {
+    if (post.status !== "ready") {
+      return (
+        <div className="flex-1 min-w-0 flex items-center justify-center text-xs text-gray-400">
+          {post.status === "processing"
+            ? "Generating post content…"
+            : "Generation failed"}
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col justify-between flex-1 min-w-0">
         <div className="space-y-3">
-          <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
+          {post.caption && (
+            <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
+          )}
 
-          <div className="flex flex-wrap gap-2">
-            {post.hashtags.map((tag, idx) => (
-              <Badge
-                key={idx}
-                className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
-              >
-                {tag}
-              </Badge>
-            ))}
-          </div>
+          {post.hashtags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {post.hashtags.map((tag, idx) => (
+                <Badge
+                  key={idx}
+                  className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 pt-4">
@@ -468,78 +502,95 @@ export default function ContentCreationHub({
     );
   };
 
-  // FULL CARD BODY for each post (grid vs list mode)
-  const renderPostCard = (post: PostItem) => {
-    if (viewMode === "list") {
-      // Horizontal card layout
-      return (
-        <Card
-          key={post.id}
-          className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex gap-4"
-        >
-          {/* left: thumb */}
-          {renderListImageBlock(post)}
+  /**
+   * GRID CARD
+   * While processing/failed:
+   *   - ONLY show the visual block (no caption/hashtags/buttons)
+   * After ready:
+   *   - show full body
+   */
+  const GridCard = (post: PostItem) => {
+    const showBody = post.status === "ready";
 
-          {/* right: text/actions */}
-          {renderListTextBlock(post)}
-        </Card>
-      );
-    }
-
-    // Grid card layout: image block then content below
     return (
       <Card
         key={post.id}
         className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col"
       >
-        {renderGridImageBlock(post)}
+        <GridVisual post={post as PostItem} />
 
-        <div className="p-4 space-y-4">
-          <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
+        {showBody && (
+          <div className="p-4 space-y-4">
+            {post.caption && (
+              <p className="text-sm text-[#1E1E1E] break-words">
+                {post.caption}
+              </p>
+            )}
 
-          <div className="flex flex-wrap gap-2">
-            {post.hashtags.map((tag, idx) => (
-              <Badge
-                key={idx}
-                className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
+            {post.hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {post.hashtags.map((tag, idx) => (
+                  <Badge
+                    key={idx}
+                    className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                onClick={() => handleScheduleClick(post.id)}
+                disabled={post.status !== "ready"}
+                className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl disabled:opacity-60"
+                size="sm"
               >
-                {tag}
-              </Badge>
-            ))}
-          </div>
+                <Calendar className="w-4 h-4 mr-2" />
+                Schedule
+              </Button>
 
-          <div className="flex gap-2 pt-2">
-            <Button
-              onClick={() => handleScheduleClick(post.id)}
-              disabled={post.status !== "ready"}
-              className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl disabled:opacity-60"
-              size="sm"
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              Schedule
-            </Button>
-
-            <Button
-              onClick={() => handlePostNowClick(post.id)}
-              disabled={post.status !== "ready"}
-              variant="outline"
-              className="flex-1 border-gray-200 rounded-xl disabled:opacity-60"
-              size="sm"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Post Now
-            </Button>
+              <Button
+                onClick={() => handlePostNowClick(post.id)}
+                disabled={post.status !== "ready"}
+                variant="outline"
+                className="flex-1 border-gray-200 rounded-xl disabled:opacity-60"
+                size="sm"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Post Now
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Card>
     );
   };
 
-  /* ────────────────────────────────────────────────────────────────────────
-     Render
-     ──────────────────────────────────────────────────────────────────────── */
+  /**
+   * LIST CARD
+   * Layout: left thumb (200x200) + right body.
+   * Right body hides everything except status text until ready.
+   */
+  const ListCard = (post: PostItem) => {
+    return (
+      <Card
+        key={post.id}
+        className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex flex-row gap-4"
+      >
+        {ListThumb(post)}
+        {ListBody(post)}
+      </Card>
+    );
+  };
+
+  /* ─────────────────────────────────────────
+     RENDER
+     ───────────────────────────────────────── */
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           <h1 className="text-3xl text-[#1E1E1E] mb-2">Create Content</h1>
@@ -549,7 +600,7 @@ export default function ContentCreationHub({
         </div>
       </div>
 
-      {/* Prompt box */}
+      {/* Prompt section */}
       <Card className="p-6 bg-white border-0 rounded-2xl">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -576,7 +627,7 @@ export default function ContentCreationHub({
         </div>
       </Card>
 
-      {/* Posts section */}
+      {/* Posts */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <TabsList className="bg-gray-100 border border-gray-200">
@@ -588,7 +639,7 @@ export default function ContentCreationHub({
             </TabsTrigger>
           </TabsList>
 
-          {/* Toggle grid/list */}
+          {/* view toggle */}
           <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-lg p-1">
             <Button
               variant="ghost"
@@ -602,7 +653,6 @@ export default function ContentCreationHub({
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
-
             <Button
               variant="ghost"
               size="sm"
@@ -628,14 +678,16 @@ export default function ContentCreationHub({
               </p>
             </Card>
           ) : viewMode === "grid" ? (
-            /* GRID VIEW: 3-up cards */
             <div className="grid lg:grid-cols-3 gap-6">
-              {myPosts.map((post) => renderPostCard(post))}
+              {myPosts.map((post) => (
+                <GridCard key={post.id} {...post} />
+              ))}
             </div>
           ) : (
-            /* LIST VIEW: vertical stack of horizontal cards */
             <div className="space-y-4">
-              {myPosts.map((post) => renderPostCard(post))}
+              {myPosts.map((post) => (
+                <ListCard key={post.id} {...post} />
+              ))}
             </div>
           )}
         </TabsContent>
@@ -646,12 +698,10 @@ export default function ContentCreationHub({
         isOpen={showTrainDialog}
         onClose={() => setShowTrainDialog(false)}
       />
-
       <AccountCreationDialog
         isOpen={showAccountDialog}
         onComplete={handleAccountCreationComplete}
       />
-
       <PaymentDialog
         isOpen={showPaymentDialog}
         onClose={() => {
