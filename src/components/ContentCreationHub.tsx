@@ -20,18 +20,13 @@ import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
 import AccountCreationDialog from "./AccountCreationDialog";
 import PaymentDialog from "./PaymentDialog";
 
-/* ────────────────────────────────────────────────
-   CONSTANTS / TYPES
-   ──────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
-const API_BASE = ""; // keep "" if Netlify proxies /api → backend
-
-// loader gif
+const API_BASE = "";
 const LOADER_GIF =
   "https://i.pinimg.com/originals/54/58/a1/5458a14ae4c8f07055b7441ff0f234cf.gif";
 
 type PostStatus = "processing" | "ready" | "failed";
-
 interface PostItem {
   id: number;
   image: string;
@@ -41,56 +36,59 @@ interface PostItem {
   predictedReach: string;
   bestTime: string;
 }
-
 interface ContentCreationHubProps {
   hasAccount: boolean;
   onAccountCreated: () => void;
 }
 
-/* ────────────────────────────────────────────────
-   VISUAL STATES
-   ──────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/** Try to pull a string caption from various model shapes */
+function coerceCaption(data: any): string {
+  if (!data) return "";
+  if (typeof data === "string") return data;
+  if (typeof data.text === "string") return data.text;
+  if (typeof data.result === "string") return data.result;
+  // Google-style: candidates[0].content.parts[0].text
+  try {
+    const t = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof t === "string") return t;
+  } catch {}
+  return "";
+}
 
-// Loader (processing state)
+const extractHashtags = (caption: string) =>
+  caption.split(/\s+/).filter((w) => w.startsWith("#")).slice(0, 6);
+
+const estimateReach = () => "12.4k est reach";
+const suggestBestTime = () => "Tue 7:30 PM";
+
+/* ──────────────────────────────────────────────── */
+/* Visual blocks */
 function LoaderBlock() {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-[#f9f9f9] rounded-xl py-10">
-      {/* GIF at true scale */}
-      <div
-        className="mb-4"
+    <div className="w-full h-full flex flex-col items-center justify-center bg-[#f9f9f9] rounded-xl p-4">
+      <img
+        src={LOADER_GIF}
+        alt="Loading animation"
         style={{
-          width: "350px",
-          height: "262px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          width: "min(350px, 80%)",
+          height: "auto",
+          maxHeight: "70%",
+          display: "block",
+          borderRadius: 8,
         }}
-      >
-        <img
-          src={LOADER_GIF}
-          alt="Loading animation"
-          style={{
-            width: "350px",
-            height: "262px",
-            objectFit: "cover",
-            borderRadius: "8px",
-          }}
-        />
-      </div>
-
-      {/* status text pill */}
-      <div className="text-sm font-medium text-gray-800 bg-white/90 border border-gray-200 px-4 py-2 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.08)] text-center">
+      />
+      <div className="mt-4 text-sm font-medium text-gray-800 bg-white/90 border border-gray-200 px-4 py-2 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.08)] text-center">
         Cooking your content magic… hang tight ✨
       </div>
     </div>
   );
 }
 
-// Error state (failed)
 function FailedBlock({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-[#2a1a1a] rounded-xl py-10 relative overflow-hidden">
-      <div className="flex flex-col items-center gap-2 z-10 text-center">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-[#2a1a1a] rounded-xl p-6">
+      <div className="flex flex-col items-center gap-2 text-center">
         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs text-white">
           <RefreshCw className="w-4 h-4 text-white" />
           <span>Generation failed</span>
@@ -106,18 +104,14 @@ function FailedBlock({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/* ────────────────────────────────────────────────
-   BACKEND CALLS
-   ──────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
+/* Backend calls */
 async function generateImageFromBackend(prompt: string) {
-  const body = { prompt, characterId: CHARACTER_ID };
-
   const res = await fetch(`${API_BASE}/api/v1/generate-image`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ prompt, characterId: CHARACTER_ID }),
   });
-
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -126,43 +120,24 @@ async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
     `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
     `Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
-
   const res = await fetch(`${API_BASE}/api/v1/generate-text`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: gptPrompt, characterId: CHARACTER_ID }),
   });
-
   if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return typeof data === "string" ? data : "";
+  return res.json();
 }
 
-/* ────────────────────────────────────────────────
-   HELPERS
-   ──────────────────────────────────────────────── */
-const extractHashtagsFromCaption = (caption: string) =>
-  caption
-    .split(/\s+/)
-    .filter((w) => w.startsWith("#"))
-    .slice(0, 6);
-
-const estimateReach = () => "12.4k est reach";
-const suggestBestTime = () => "Tue 7:30 PM";
-
-/* ────────────────────────────────────────────────
-   MAIN COMPONENT
-   ──────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────── */
 export default function ContentCreationHub({
   hasAccount,
   onAccountCreated,
 }: ContentCreationHubProps) {
   const [customPrompt, setCustomPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
-
   const [myPosts, setMyPosts] = useState<PostItem[]>([]);
   const [nextId, setNextId] = useState(100);
-
   const [activeTab, setActiveTab] = useState("my-posts");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
@@ -172,33 +147,31 @@ export default function ContentCreationHub({
 
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
-  /* ───────── GENERATE FLOW ───────── */
+  /* Generate */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
       promptRef.current?.focus();
       return;
     }
-
     setGenerating(true);
 
-    // optimistic placeholder post
     const optimisticId = nextId;
-    const optimistic: PostItem = {
-      id: optimisticId,
-      image: "",
-      caption: "",
-      status: "processing",
-      hashtags: [],
-      predictedReach: "—",
-      bestTime: "—",
-    };
-
-    setMyPosts((prev) => [optimistic, ...prev]);
+    setMyPosts((prev) => [
+      {
+        id: optimisticId,
+        image: "",
+        caption: "",
+        status: "processing",
+        hashtags: [],
+        predictedReach: "—",
+        bestTime: "—",
+      },
+      ...prev,
+    ]);
     setNextId((n) => n + 1);
     setActiveTab("my-posts");
 
     try {
-      // 1. generate image
       const imageRes = await generateImageFromBackend(customPrompt);
       const url =
         Array.isArray(imageRes.image_urls) && imageRes.image_urls.length
@@ -206,15 +179,17 @@ export default function ContentCreationHub({
           : "";
       if (!url) throw new Error("No image URL");
 
-      // 2. generate caption
-      let caption = "";
+      let captionRaw: any = "";
       try {
-        caption = await generateCaptionFromBackend(customPrompt);
+        captionRaw = await generateCaptionFromBackend(customPrompt);
       } catch {
-        caption = "";
+        captionRaw = "";
       }
 
-      // 3. finalize post
+      // Robust parse + guaranteed fallback
+      let caption = coerceCaption(captionRaw).trim();
+      if (!caption) caption = `✨ ${customPrompt}`;
+
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
@@ -223,68 +198,39 @@ export default function ContentCreationHub({
                 image: url,
                 caption,
                 status: "ready",
-                hashtags: extractHashtagsFromCaption(caption),
+                hashtags: extractHashtags(caption),
                 predictedReach: estimateReach(),
                 bestTime: suggestBestTime(),
               }
             : p
         )
       );
-
       setCustomPrompt("");
     } catch {
-      // mark as failed
       setMyPosts((prev) =>
-        prev.map((p) =>
-          p.id === optimisticId
-            ? {
-                ...p,
-                status: "failed",
-              }
-            : p
-        )
+        prev.map((p) => (p.id === optimisticId ? { ...p, status: "failed" } : p))
       );
     } finally {
       setGenerating(false);
     }
   };
 
-  /* ───────── DELETE POST ───────── */
-  const handleDeletePost = (postId: number) => {
+  const handleDeletePost = (postId: number) =>
     setMyPosts((prev) => prev.filter((p) => p.id !== postId));
-  };
 
-  /* ───────── CARD RENDER HELPERS ───────── */
-
-  // GRID CARD
+  /* Cards */
   const GridCard = (post: PostItem) => (
-    <Card
-      key={post.id}
-      className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col"
-    >
-      {/* Visual area:
-         - fixed square for layout consistency
-         - always bg #F9F9F9 so the loader blends
-      */}
-      <div className="w-full aspect-square bg-[#f9f9f9] rounded-xl overflow-hidden flex items-stretch justify-stretch">
-        {post.status === "processing" && (
-          <div className="w-full h-full flex items-center justify-center">
-            <LoaderBlock />
-          </div>
-        )}
-
+    <Card key={post.id} className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col">
+      <div className="w-full aspect-square bg-[#f9f9f9] rounded-xl overflow-hidden flex">
+        {post.status === "processing" && <LoaderBlock />}
         {post.status === "failed" && (
-          <div className="w-full h-full flex items-center justify-center">
-            <FailedBlock
-              onRetry={() => {
-                // could optionally prefill retry with same caption
-                setCustomPrompt(post.caption || "");
-                promptRef.current?.focus();
-              }}
-            />
-          </div>
+          <FailedBlock
+            onRetry={() => {
+              setCustomPrompt(post.caption || "");
+              promptRef.current?.focus();
+            }}
+          />
         )}
-
         {post.status === "ready" && (
           <div className="relative w-full h-full">
             <ImageWithFallback
@@ -294,8 +240,6 @@ export default function ContentCreationHub({
               crossOrigin="anonymous"
               referrerPolicy="no-referrer"
             />
-
-            {/* bottom overlay stats */}
             <div className="absolute bottom-3 left-3 right-3 flex gap-2">
               <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2 text-white text-sm">
                 <Heart className="w-4 h-4 text-white" />
@@ -309,42 +253,30 @@ export default function ContentCreationHub({
         )}
       </div>
 
-      {/* Body under image */}
+      {/* Always render caption block when ready */}
       {post.status === "ready" && (
         <div className="p-4 space-y-4">
-          {post.caption && (
-            <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
-          )}
-
+          <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
           {post.hashtags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {post.hashtags.map((tag, i) => (
-                <Badge
-                  key={i}
-                  className="bg-gray-100 text-[#A1A1A1] text-xs hover:bg-gray-100"
-                >
+                <Badge key={i} className="bg-gray-100 text-[#A1A1A1] text-xs hover:bg-gray-100">
                   {tag}
                 </Badge>
               ))}
             </div>
           )}
-
           <div className="flex flex-col gap-2 pt-2">
             <div className="flex gap-2">
               <Button className="flex-1 bg-[rgb(100,100,180)] text-white rounded-xl hover:bg-[#6464B4]">
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule
               </Button>
-
-              <Button
-                variant="outline"
-                className="flex-1 border-gray-200 rounded-xl"
-              >
+              <Button variant="outline" className="flex-1 border-gray-200 rounded-xl">
                 <Send className="w-4 h-4 mr-2" />
                 Post Now
               </Button>
             </div>
-
             <Button
               variant="ghost"
               className="text-red-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center gap-2 text-xs font-medium rounded-xl"
@@ -359,34 +291,21 @@ export default function ContentCreationHub({
     </Card>
   );
 
-  // LIST CARD
   const ListCard = (post: PostItem) => (
     <Card
       key={post.id}
       className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex flex-row gap-4 items-start"
     >
-      {/* Left thumb:
-         - locked at 200x200
-         - bg #F9F9F9 to match loader
-      */}
-      <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 bg-[#f9f9f9] flex items-stretch justify-stretch">
-        {post.status === "processing" && (
-          <div className="w-full h-full flex items-center justify-center">
-            <LoaderBlock />
-          </div>
-        )}
-
+      <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 bg-[#f9f9f9]">
+        {post.status === "processing" && <LoaderBlock />}
         {post.status === "failed" && (
-          <div className="w-full h-full flex items-center justify-center">
-            <FailedBlock
-              onRetry={() => {
-                setCustomPrompt(post.caption || "");
-                promptRef.current?.focus();
-              }}
-            />
-          </div>
+          <FailedBlock
+            onRetry={() => {
+              setCustomPrompt(post.caption || "");
+              promptRef.current?.focus();
+            }}
+          />
         )}
-
         {post.status === "ready" && (
           <ImageWithFallback
             src={post.image}
@@ -398,42 +317,34 @@ export default function ContentCreationHub({
         )}
       </div>
 
-      {/* Right side content */}
+      {/* RIGHT COLUMN:
+          - Only render content when READY to prevent duplicate status lines.
+       */}
       {post.status === "ready" ? (
         <div className="flex flex-col justify-between flex-1 min-w-0">
           <div className="space-y-3">
             <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
-
             {post.hashtags.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {post.hashtags.map((tag, i) => (
-                  <Badge
-                    key={i}
-                    className="bg-gray-100 text-[#A1A1A1] text-xs hover:bg-gray-100"
-                  >
+                  <Badge key={i} className="bg-gray-100 text-[#A1A1A1] text-xs hover:bg-gray-100">
                     {tag}
                   </Badge>
                 ))}
               </div>
             )}
           </div>
-
           <div className="flex flex-col gap-2 pt-4">
             <div className="flex gap-2">
               <Button className="flex-1 bg-[rgb(100,100,180)] text-white rounded-xl hover:bg-[#6464B4]">
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule
               </Button>
-
-              <Button
-                variant="outline"
-                className="flex-1 border-gray-200 rounded-xl"
-              >
+              <Button variant="outline" className="flex-1 border-gray-200 rounded-xl">
                 <Send className="w-4 h-4 mr-2" />
                 Post Now
               </Button>
             </div>
-
             <Button
               variant="ghost"
               className="text-red-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-start gap-2 text-xs font-medium rounded-xl self-start"
@@ -445,37 +356,28 @@ export default function ContentCreationHub({
           </div>
         </div>
       ) : (
-        // While processing / failed, just show status text on the right
-        <div className="flex items-center flex-1 min-w-0 text-[11px] text-gray-500 leading-tight">
-          {post.status === "processing"
-            ? "Cooking your content magic… hang tight ✨"
-            : "Generation failed. Try again."}
-        </div>
+        // render nothing while processing; (failed shows only the left failure block)
+        <div className="flex-1" />
       )}
     </Card>
   );
 
-  /* ───────── RENDER ───────── */
+  /* RENDER */
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           <h1 className="text-3xl text-[#1E1E1E] mb-2">Create Content</h1>
-          <p className="text-gray-600">
-            AI-powered content suggestions tailored to your audience
-          </p>
+          <p className="text-gray-600">AI-powered content suggestions tailored to your audience</p>
         </div>
       </div>
 
-      {/* Prompt / Generator */}
       <Card className="p-6 bg-white border-0 rounded-2xl">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-[#6464B4]" />
             <h3 className="text-[#1E1E1E]">Generate Custom Content</h3>
           </div>
-
           <Textarea
             ref={promptRef}
             placeholder="Describe the post you want to create..."
@@ -483,7 +385,6 @@ export default function ContentCreationHub({
             onChange={(e) => setCustomPrompt(e.target.value)}
             className="rounded-xl border-gray-200 min-h-[80px]"
           />
-
           <Button
             onClick={handleGenerateCustomPost}
             disabled={generating}
@@ -495,7 +396,6 @@ export default function ContentCreationHub({
         </div>
       </Card>
 
-      {/* Posts / Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <TabsList className="bg-gray-100 border border-gray-200">
@@ -507,7 +407,6 @@ export default function ContentCreationHub({
             </TabsTrigger>
           </TabsList>
 
-          {/* grid / list toggle */}
           <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-lg p-1">
             <Button
               variant="ghost"
@@ -521,7 +420,6 @@ export default function ContentCreationHub({
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
-
             <Button
               variant="ghost"
               size="sm"
@@ -562,7 +460,6 @@ export default function ContentCreationHub({
         </TabsContent>
       </Tabs>
 
-      {/* Dialogs */}
       <TrainAmbassadorDialog
         isOpen={showTrainDialog}
         onClose={() => setShowTrainDialog(false)}
