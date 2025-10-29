@@ -26,7 +26,7 @@ import PaymentDialog from "./PaymentDialog";
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
 const API_BASE = ""; // keep "" if Netlify proxies /api → backend
 
-// loader gif (new)
+// loader gif
 const LOADER_GIF =
   "https://i.pinimg.com/originals/54/58/a1/5458a14ae4c8f07055b7441ff0f234cf.gif";
 
@@ -51,30 +51,47 @@ interface ContentCreationHubProps {
    VISUAL STATES
    ──────────────────────────────────────────────── */
 
-// Loader: square container, on-brand bg, GIF centered.
+// Loader (processing state)
 function LoaderBlock() {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-[#f9f9f9] rounded-xl p-4">
-      <div className="w-20 h-20 mb-3 flex items-center justify-center">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-[#f9f9f9] rounded-xl py-10">
+      {/* GIF at true scale */}
+      <div
+        className="mb-4"
+        style={{
+          width: "350px",
+          height: "262px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <img
           src={LOADER_GIF}
           alt="Loading animation"
-          className="w-full h-full object-contain pointer-events-none select-none"
+          style={{
+            width: "350px",
+            height: "262px",
+            objectFit: "cover",
+            borderRadius: "8px",
+          }}
         />
       </div>
-      <div className="text-xs font-medium text-gray-700 bg-white/80 border border-gray-200 px-3 py-1 rounded-full shadow-sm text-center">
+
+      {/* status text pill */}
+      <div className="text-sm font-medium text-gray-800 bg-white/90 border border-gray-200 px-4 py-2 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.08)] text-center">
         Cooking your content magic… hang tight ✨
       </div>
     </div>
   );
 }
 
-// Failure state (kept dark to signal error)
+// Error state (failed)
 function FailedBlock({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#2a1a1a] via-[#3a1f1f] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden p-4">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-[#2a1a1a] rounded-xl py-10 relative overflow-hidden">
       <div className="flex flex-col items-center gap-2 z-10 text-center">
-        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs">
+        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs text-white">
           <RefreshCw className="w-4 h-4 text-white" />
           <span>Generation failed</span>
         </div>
@@ -239,31 +256,33 @@ export default function ContentCreationHub({
 
   /* ───────── CARD RENDER HELPERS ───────── */
 
-  // GRID CARD (square visual up top)
+  // GRID CARD
   const GridCard = (post: PostItem) => (
     <Card
       key={post.id}
       className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col"
     >
-      {/* visual area:
-          - lock it square
-          - match loader bg (#f9f9f9) so no flash between states
-        */}
-      <div className="w-full aspect-square bg-[#f9f9f9] rounded-xl overflow-hidden">
+      {/* Visual area:
+         - fixed square for layout consistency
+         - always bg #F9F9F9 so the loader blends
+      */}
+      <div className="w-full aspect-square bg-[#f9f9f9] rounded-xl overflow-hidden flex items-stretch justify-stretch">
         {post.status === "processing" && (
-          <div className="w-full h-full">
+          <div className="w-full h-full flex items-center justify-center">
             <LoaderBlock />
           </div>
         )}
 
         {post.status === "failed" && (
-          <FailedBlock
-            onRetry={() => {
-              // You could prefill to retry
-              setCustomPrompt(post.caption || "");
-              promptRef.current?.focus();
-            }}
-          />
+          <div className="w-full h-full flex items-center justify-center">
+            <FailedBlock
+              onRetry={() => {
+                // could optionally prefill retry with same caption
+                setCustomPrompt(post.caption || "");
+                promptRef.current?.focus();
+              }}
+            />
+          </div>
         )}
 
         {post.status === "ready" && (
@@ -276,7 +295,7 @@ export default function ContentCreationHub({
               referrerPolicy="no-referrer"
             />
 
-            {/* overlay stats bar */}
+            {/* bottom overlay stats */}
             <div className="absolute bottom-3 left-3 right-3 flex gap-2">
               <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2 text-white text-sm">
                 <Heart className="w-4 h-4 text-white" />
@@ -290,7 +309,7 @@ export default function ContentCreationHub({
         )}
       </div>
 
-      {/* only show caption / actions when it's ready */}
+      {/* Body under image */}
       {post.status === "ready" && (
         <div className="p-4 space-y-4">
           {post.caption && (
@@ -340,30 +359,32 @@ export default function ContentCreationHub({
     </Card>
   );
 
-  // LIST CARD (fixed 200x200 left thumb, content right)
+  // LIST CARD
   const ListCard = (post: PostItem) => (
     <Card
       key={post.id}
       className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex flex-row gap-4 items-start"
     >
-      {/* thumbnail column:
-         - fixed 200x200 so list layout never jumps
-         - same #f9f9f9 bg so seamless with loader
-       */}
-      <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 bg-[#f9f9f9]">
+      {/* Left thumb:
+         - locked at 200x200
+         - bg #F9F9F9 to match loader
+      */}
+      <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 bg-[#f9f9f9] flex items-stretch justify-stretch">
         {post.status === "processing" && (
-          <div className="w-full h-full">
+          <div className="w-full h-full flex items-center justify-center">
             <LoaderBlock />
           </div>
         )}
 
         {post.status === "failed" && (
-          <FailedBlock
-            onRetry={() => {
-              setCustomPrompt(post.caption || "");
-              promptRef.current?.focus();
-            }}
-          />
+          <div className="w-full h-full flex items-center justify-center">
+            <FailedBlock
+              onRetry={() => {
+                setCustomPrompt(post.caption || "");
+                promptRef.current?.focus();
+              }}
+            />
+          </div>
         )}
 
         {post.status === "ready" && (
@@ -377,7 +398,7 @@ export default function ContentCreationHub({
         )}
       </div>
 
-      {/* right column */}
+      {/* Right side content */}
       {post.status === "ready" ? (
         <div className="flex flex-col justify-between flex-1 min-w-0">
           <div className="space-y-3">
@@ -424,7 +445,7 @@ export default function ContentCreationHub({
           </div>
         </div>
       ) : (
-        // while processing/failed, the right column becomes status text
+        // While processing / failed, just show status text on the right
         <div className="flex items-center flex-1 min-w-0 text-[11px] text-gray-500 leading-tight">
           {post.status === "processing"
             ? "Cooking your content magic… hang tight ✨"
@@ -437,7 +458,7 @@ export default function ContentCreationHub({
   /* ───────── RENDER ───────── */
   return (
     <div className="space-y-6">
-      {/* Page header */}
+      {/* Header */}
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           <h1 className="text-3xl text-[#1E1E1E] mb-2">Create Content</h1>
@@ -486,6 +507,7 @@ export default function ContentCreationHub({
             </TabsTrigger>
           </TabsList>
 
+          {/* grid / list toggle */}
           <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-lg p-1">
             <Button
               variant="ghost"
