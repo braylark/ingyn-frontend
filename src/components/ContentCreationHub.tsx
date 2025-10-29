@@ -12,7 +12,6 @@ import {
   Heart,
   LayoutGrid,
   List,
-  Loader2,
   RefreshCw,
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -24,7 +23,7 @@ import PaymentDialog from "./PaymentDialog";
    CONSTANTS
    ──────────────────────────────────────────────── */
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
-const API_BASE = ""; // keep empty if Netlify proxies /api → backend
+const API_BASE = ""; // keep "" if Netlify proxies /api → backend
 
 type PostStatus = "processing" | "ready" | "failed";
 
@@ -44,43 +43,49 @@ interface ContentCreationHubProps {
 }
 
 /* ────────────────────────────────────────────────
-   VISUAL STATES
+   LOADER + FAILED VISUALS
    ──────────────────────────────────────────────── */
-function GeneratingBlock() {
-  return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden bg-gradient-to-br from-[#111] via-[#232356] to-[#000] flex items-center justify-center">
-      {/* animated glow */}
-      <div className="absolute w-56 h-56 rounded-full bg-[radial-gradient(circle_at_center,rgba(100,100,180,0.6),transparent_70%)] blur-3xl animate-pulse opacity-70" />
 
-      {/* shimmer sweep */}
-      <div className="absolute inset-0 [mask-image:radial-gradient(circle_at_center,white_0%,transparent_70%)]">
-        <div className="w-full h-full -translate-x-full animate-[shimmerMove_2s_linear_infinite] bg-[linear-gradient(120deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.18)_50%,rgba(255,255,255,0)_100%)]" />
+/**
+ * Puff-style loader: two circles expanding/fading.
+ * Underneath: "Your post is being generated."
+ */
+function PuffLoaderBlock() {
+  return (
+    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#111] via-[#232356] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden">
+      {/* two expanding circles */}
+      <div className="relative w-16 h-16 mb-3">
+        <div className="absolute inset-0 rounded-full border-4 border-white/60 animate-[puff_1.5s_ease-out_infinite] opacity-80" />
+        <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-[puff_1.5s_ease-out_infinite] [animation-delay:0.75s]" />
       </div>
+
+      <div className="text-xs font-medium bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.8)]">
+        Your post is being generated.
+      </div>
+
       <style>{`
-        @keyframes shimmerMove {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
+        @keyframes puff {
+          0% {
+            transform: scale(0.5);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1.5);
+            opacity: 0;
+          }
         }
       `}</style>
-
-      {/* spinner + text */}
-      <div className="relative z-10 flex flex-col items-center gap-2 text-white">
-        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs">
-          <Loader2 className="w-4 h-4 animate-spin text-white" />
-          <span>Generating image…</span>
-        </div>
-        <p className="text-[10px] text-white/60 tracking-widest uppercase">
-          AI is creating your post
-        </p>
-      </div>
     </div>
   );
 }
 
+/**
+ * Failure block with retry action.
+ */
 function FailedBlock({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden bg-gradient-to-br from-[#2a1a1a] via-[#3a1f1f] to-[#000] flex items-center justify-center">
-      <div className="flex flex-col items-center gap-2 text-white z-10">
+    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#2a1a1a] via-[#3a1f1f] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden">
+      <div className="flex flex-col items-center gap-2 z-10">
         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs">
           <RefreshCw className="w-4 h-4 text-white" />
           <span>Generation failed</span>
@@ -101,23 +106,28 @@ function FailedBlock({ onRetry }: { onRetry: () => void }) {
    ──────────────────────────────────────────────── */
 async function generateImageFromBackend(prompt: string) {
   const body = { prompt, characterId: CHARACTER_ID };
+
   const res = await fetch(`${API_BASE}/api/v1/generate-image`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
-    `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
+    `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
+    `Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
+
   const res = await fetch(`${API_BASE}/api/v1/generate-text`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: gptPrompt, characterId: CHARACTER_ID }),
   });
+
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return typeof data === "string" ? data : "";
@@ -163,7 +173,7 @@ export default function ContentCreationHub({
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
   /* ───────────────────────────
-     Generate flow
+     GENERATE FLOW
      ─────────────────────────── */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
@@ -173,7 +183,6 @@ export default function ContentCreationHub({
 
     setGenerating(true);
 
-    // optimistic placeholder post
     const optimisticId = nextId;
     const optimistic: PostItem = {
       id: optimisticId,
@@ -190,7 +199,7 @@ export default function ContentCreationHub({
     setActiveTab("my-posts");
 
     try {
-      // 1. generate image
+      // 1. image
       const imageRes = await generateImageFromBackend(customPrompt);
       const url =
         Array.isArray(imageRes.image_urls) && imageRes.image_urls.length
@@ -198,7 +207,7 @@ export default function ContentCreationHub({
           : "";
       if (!url) throw new Error("No image URL");
 
-      // 2. generate caption
+      // 2. caption
       let caption = "";
       try {
         caption = await generateCaptionFromBackend(customPrompt);
@@ -242,7 +251,7 @@ export default function ContentCreationHub({
   };
 
   /* ───────────────────────────
-     Action handlers
+     ACTION HANDLERS
      ─────────────────────────── */
   const handleScheduleClick = (postId: number) => {
     if (!hasAccount) {
@@ -250,7 +259,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // future: open scheduler
+      // TODO integrate scheduler
     }
   };
 
@@ -260,7 +269,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // future: post API call
+      // TODO integrate posting
     }
   };
 
@@ -277,11 +286,12 @@ export default function ContentCreationHub({
   };
 
   /* ───────────────────────────
-     Card render helpers
+     CARD RENDER HELPERS
      ─────────────────────────── */
 
-  // GRID CARD:
-  // square visual on top; hide body until status === "ready"
+  // GRID CARD (for grid mode)
+  // - big image block (aspect-square)
+  // - only shows caption/buttons if status === "ready"
   const GridCard = (post: PostItem) => {
     const onRetry = () => {
       setCustomPrompt(post.caption.replace(/^✨\s?/, "") || "");
@@ -297,16 +307,16 @@ export default function ContentCreationHub({
         className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col"
       >
         <div className="w-full aspect-square">
-          {post.status === "processing" && <GeneratingBlock />}
+          {post.status === "processing" && <PuffLoaderBlock />}
 
           {post.status === "failed" && <FailedBlock onRetry={onRetry} />}
 
           {post.status === "ready" && (
-            <div className="relative w-full h-full">
+            <div className="relative w-full h-full rounded-xl overflow-hidden">
               <ImageWithFallback
                 src={post.image}
                 alt={`Generated ${post.id}`}
-                className="w-full h-full object-cover rounded-xl"
+                className="w-full h-full object-cover"
                 crossOrigin="anonymous"
                 referrerPolicy="no-referrer"
               />
@@ -374,8 +384,10 @@ export default function ContentCreationHub({
     );
   };
 
-  // LIST CARD:
-  // left image is fixed 200x200; right side hidden unless ready
+  // LIST CARD (for list mode)
+  // - image column is a fixed 200x200 thumbnail on the left
+  // - right column only appears when status === "ready"
+  // - while processing: we show the PuffLoaderBlock in that 200x200 box
   const ListCard = (post: PostItem) => {
     const onRetry = () => {
       setCustomPrompt(post.caption.replace(/^✨\s?/, "") || "");
@@ -390,10 +402,19 @@ export default function ContentCreationHub({
         key={post.id}
         className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex flex-row gap-4 items-start"
       >
-        <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0">
-          {post.status === "processing" && <GeneratingBlock />}
+        {/* LEFT: fixed-size thumbnail container */}
+        <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 flex-grow-0 bg-black">
+          {post.status === "processing" && (
+            <div className="w-full h-full">
+              <PuffLoaderBlock />
+            </div>
+          )}
 
-          {post.status === "failed" && <FailedBlock onRetry={onRetry} />}
+          {post.status === "failed" && (
+            <div className="w-full h-full">
+              <FailedBlock onRetry={onRetry} />
+            </div>
+          )}
 
           {post.status === "ready" && (
             <ImageWithFallback
@@ -406,6 +427,7 @@ export default function ContentCreationHub({
           )}
         </div>
 
+        {/* RIGHT: content only if ready */}
         {post.status === "ready" && (
           <div className="flex flex-col justify-between flex-1 min-w-0">
             <div className="space-y-3">
@@ -452,18 +474,15 @@ export default function ContentCreationHub({
           </div>
         )}
 
-        {post.status === "failed" && (
-          <div className="flex flex-col justify-center flex-1 min-w-0 text-sm text-gray-500">
-            <div className="text-gray-400 text-xs">
-              Generation failed. Try again.
-            </div>
+        {/* RIGHT: fallback message if not ready */}
+        {post.status === "processing" && (
+          <div className="flex items-center flex-1 min-w-0 text-[11px] text-gray-500 uppercase tracking-wide">
+            Your post is being generated.
           </div>
         )}
-        {post.status === "processing" && (
-          <div className="flex flex-col justify-center flex-1 min-w-0 text-sm text-gray-400">
-            <div className="text-[11px] uppercase tracking-wide text-gray-400">
-              Generating post content…
-            </div>
+        {post.status === "failed" && (
+          <div className="flex items-center flex-1 min-w-0 text-[11px] text-gray-500">
+            Generation failed. Try again.
           </div>
         )}
       </Card>
@@ -485,7 +504,7 @@ export default function ContentCreationHub({
         </div>
       </div>
 
-      {/* Prompt Input */}
+      {/* Prompt / Generator */}
       <Card className="p-6 bg-white border-0 rounded-2xl">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -512,7 +531,7 @@ export default function ContentCreationHub({
         </div>
       </Card>
 
-      {/* Posts Tabs */}
+      {/* Posts */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <TabsList className="bg-gray-100 border border-gray-200">
