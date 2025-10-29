@@ -12,6 +12,7 @@ import {
   Heart,
   LayoutGrid,
   List,
+  Loader2, // spinner icon
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
@@ -22,11 +23,10 @@ import PaymentDialog from "./PaymentDialog";
    CONSTANTS
    ────────────────────────────────────────────────────────────────────────── */
 
-// This is the ID you're passing to the backend so Higgsfield can keep the same look
+// reference character id for backend
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
 
-// If you're proxying through Vercel to Render, leave this as "" so it hits same-origin.
-// If you run local FastAPI at http://localhost:8000, set API_BASE = "http://localhost:8000"
+// keep "" if you're proxying /api on the same origin (Netlify -> Render)
 const API_BASE = "";
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -50,9 +50,10 @@ interface ContentCreationHubProps {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Minimal Skeleton
+   Skeleton + LoadingCard
+   - We’re making a “visual loading state” with shimmer + spinner + overlay text
    ────────────────────────────────────────────────────────────────────────── */
-function Skeleton({ className = "" }: { className?: string }) {
+function ShimmerBox({ className = "" }: { className?: string }) {
   return (
     <div
       className={`relative overflow-hidden bg-gray-200/80 rounded-lg ${className}`}
@@ -60,8 +61,38 @@ function Skeleton({ className = "" }: { className?: string }) {
       aria-live="polite"
       role="status"
     >
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
       <style>{`@keyframes shimmer { 100% { transform: translateX(100%); } }`}</style>
+    </div>
+  );
+}
+
+/**
+ * This is the visual that shows while post.status === "processing"
+ * - For grid view, it fills a square
+ * - For list view, we’ll reuse a thumbnail version
+ */
+function GeneratingVisual({
+  label = "Generating…",
+  variant = "square", // "square" | "thumb"
+}: {
+  label?: string;
+  variant?: "square" | "thumb";
+}) {
+  const baseClasses =
+    variant === "thumb"
+      ? "w-full h-full rounded-lg overflow-hidden bg-black/5 relative flex items-center justify-center"
+      : "w-full h-full rounded-lg overflow-hidden bg-black/5 relative flex items-center justify-center";
+
+  return (
+    <div className={baseClasses}>
+      <ShimmerBox className="absolute inset-0" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-xs font-medium">
+          <Loader2 className="w-4 h-4 animate-spin text-white" />
+          <span>{label}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -70,14 +101,7 @@ function Skeleton({ className = "" }: { className?: string }) {
    Backend calls
    ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * Calls FastAPI /api/v1/generate-image
- * Expects backend to return:
- * {
- *   "image_urls": ["https://...","https://..."],
- *   "caption": "optional"
- * }
- */
+// GET IMAGE URLS FROM BACKEND
 async function generateImageFromBackend(prompt: string) {
   const body = {
     prompt,
@@ -98,12 +122,7 @@ async function generateImageFromBackend(prompt: string) {
   return res.json();
 }
 
-/**
- * Calls FastAPI /api/v1/generate-text
- * Your backend returns plain text:
- *   return res['candidates'][0]['content']['parts'][0]['text']
- * So the response is just a string, NOT an object.
- */
+// GET CAPTION/TEXT FROM BACKEND
 async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
     `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
@@ -123,9 +142,26 @@ async function generateCaptionFromBackend(topicPrompt: string) {
     throw new Error(`HTTP ${res.status}: ${msg}`);
   }
 
-  // backend returns raw text, not {text: "..."}
   const data = await res.json();
   return typeof data === "string" ? data : "";
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Helper display metadata
+   ────────────────────────────────────────────────────────────────────────── */
+function extractHashtagsFromCaption(caption: string): string[] {
+  if (!caption) return [];
+  const words = caption.split(/\s+/);
+  const tags = words.filter((w) => w.trim().startsWith("#"));
+  return tags.slice(0, 6);
+}
+
+function estimateReach() {
+  return "12.4k est reach";
+}
+
+function suggestBestTime() {
+  return "Tue 7:30 PM";
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -135,17 +171,17 @@ export default function ContentCreationHub({
   hasAccount,
   onAccountCreated,
 }: ContentCreationHubProps) {
-  // user input prompt
+  // prompt input
   const [customPrompt, setCustomPrompt] = useState("");
 
-  // loading state while we call backend
+  // loading the generation request
   const [generating, setGenerating] = useState(false);
 
-  // generated posts we show in UI
+  // posts feed
   const [myPosts, setMyPosts] = useState<PostItem[]>([]);
   const [nextId, setNextId] = useState(100);
 
-  // ui state
+  // view/UI state
   const [activeTab, setActiveTab] = useState("my-posts");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
@@ -154,7 +190,7 @@ export default function ContentCreationHub({
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  // schedule/post actions
+  // pending action (schedule/post)
   const [pendingAction, setPendingAction] = useState<"schedule" | "post" | null>(
     null
   );
@@ -163,7 +199,7 @@ export default function ContentCreationHub({
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
   /* ────────────────────────────────────────────────────────────────────────
-     Generate new post flow
+     Generate new post (optimistic skeleton → final)
      ──────────────────────────────────────────────────────────────────────── */
   const handleGenerateCustomPost = async () => {
     if (!customPrompt.trim()) {
@@ -173,7 +209,7 @@ export default function ContentCreationHub({
 
     setGenerating(true);
 
-    // 1. Create optimistic/skeleton card first
+    // optimistic "processing" card
     const optimisticId = nextId;
     const optimisticPost: PostItem = {
       id: optimisticId,
@@ -190,9 +226,8 @@ export default function ContentCreationHub({
     setActiveTab("my-posts");
 
     try {
-      // 2. Ask backend for image(s)
+      // 1. request image(s)
       const imageResponse = await generateImageFromBackend(customPrompt);
-      // image_urls is an array of full https:// URLs from Higgsfield
       const firstImageUrl =
         Array.isArray(imageResponse?.image_urls) &&
         imageResponse.image_urls.length > 0
@@ -203,7 +238,7 @@ export default function ContentCreationHub({
         throw new Error("No image URLs returned from backend");
       }
 
-      // 3. Ask backend for caption text (best effort)
+      // 2. request caption
       let finalCaption = `✨ ${customPrompt}`;
       try {
         const cap = await generateCaptionFromBackend(customPrompt);
@@ -211,10 +246,10 @@ export default function ContentCreationHub({
           finalCaption = cap;
         }
       } catch {
-        // if caption gen fails we just keep fallback
+        // ignore, fallback caption is ok
       }
 
-      // 4. Update that optimistic card with final data
+      // 3. finish card
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
@@ -231,10 +266,10 @@ export default function ContentCreationHub({
         )
       );
 
-      // clear the textarea
+      // clear prompt box
       setCustomPrompt("");
     } catch (err) {
-      // if anything failed, mark that optimistic card as failed
+      // mark as failed
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
@@ -252,30 +287,7 @@ export default function ContentCreationHub({
   };
 
   /* ────────────────────────────────────────────────────────────────────────
-     Helpers to fake metrics (reach/time/hashtags)
-     You can replace these with real logic later.
-     ──────────────────────────────────────────────────────────────────────── */
-  function extractHashtagsFromCaption(caption: string): string[] {
-    if (!caption) return [];
-    // super simple split to pull out words that START with '#'
-    const words = caption.split(/\s+/);
-    const tags = words.filter((w) => w.trim().startsWith("#"));
-    // limit to like 6 for display
-    return tags.slice(0, 6);
-  }
-
-  function estimateReach() {
-    // placeholder until you have analytics
-    return "12.4k est reach";
-  }
-
-  function suggestBestTime() {
-    // placeholder until you have analytics
-    return "Tue 7:30 PM";
-  }
-
-  /* ────────────────────────────────────────────────────────────────────────
-     Post actions (Schedule / Post Now)
+     Post actions
      ──────────────────────────────────────────────────────────────────────── */
   const handleScheduleClick = (postId: number) => {
     if (!hasAccount) {
@@ -283,7 +295,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // TODO: integrate scheduler
+      // TODO hook scheduler
     }
   };
 
@@ -293,7 +305,7 @@ export default function ContentCreationHub({
       setPendingPostId(postId);
       setShowAccountDialog(true);
     } else {
-      // TODO: integrate direct posting
+      // TODO hook posting API
     }
   };
 
@@ -310,6 +322,220 @@ export default function ContentCreationHub({
   };
 
   /* ────────────────────────────────────────────────────────────────────────
+     Card Render Helpers
+     ──────────────────────────────────────────────────────────────────────── */
+
+  // IMAGE BLOCK for grid view (square style)
+  const renderGridImageBlock = (post: PostItem) => {
+    return (
+      <div className="w-full aspect-square relative">
+        {post.status === "ready" ? (
+          <>
+            <ImageWithFallback
+              src={post.image}
+              alt={`Post ${post.id}`}
+              className="w-full h-full object-cover rounded-lg"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+            />
+
+            {/* overlay stats */}
+            <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+              <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
+                <Heart className="w-4 h-4 text-white" />
+                <span className="text-white text-sm">
+                  ~{post.predictedReach}
+                </span>
+              </div>
+              <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#00D1B2]" />
+              </div>
+            </div>
+          </>
+        ) : post.status === "processing" ? (
+          <GeneratingVisual label="Generating…" variant="square" />
+        ) : (
+          // failed
+          <div className="w-full h-full relative">
+            <ShimmerBox className="w-full h-full rounded-lg" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-xs font-medium text-white">
+                <span>Failed</span>
+                <button
+                  className="underline text-white"
+                  onClick={() => {
+                    const seed = post.caption?.replace(/^✨\s?/, "") || "";
+                    setCustomPrompt(seed);
+                    document
+                      .querySelector("textarea")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                    promptRef.current?.focus();
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // IMAGE BLOCK for list view (thumbnail style left column)
+  const renderListImageBlock = (post: PostItem) => {
+    return (
+      <div className="w-full max-w-[140px] aspect-square flex-shrink-0 relative rounded-lg overflow-hidden">
+        {post.status === "ready" ? (
+          <ImageWithFallback
+            src={post.image}
+            alt={`Post ${post.id}`}
+            className="w-full h-full object-cover"
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+          />
+        ) : post.status === "processing" ? (
+          <GeneratingVisual label="Generating…" variant="thumb" />
+        ) : (
+          <div className="w-full h-full relative">
+            <ShimmerBox className="w-full h-full rounded-lg" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px] font-medium text-white">
+                <span>Failed</span>
+                <button
+                  className="underline text-white"
+                  onClick={() => {
+                    const seed = post.caption?.replace(/^✨\s?/, "") || "";
+                    setCustomPrompt(seed);
+                    document
+                      .querySelector("textarea")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                    promptRef.current?.focus();
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // RIGHT SIDE CONTENT for list view
+  const renderListTextBlock = (post: PostItem) => {
+    return (
+      <div className="flex flex-col justify-between flex-1 min-w-0">
+        <div className="space-y-3">
+          <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
+
+          <div className="flex flex-wrap gap-2">
+            {post.hashtags.map((tag, idx) => (
+              <Badge
+                key={idx}
+                className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
+              >
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <Button
+            onClick={() => handleScheduleClick(post.id)}
+            disabled={post.status !== "ready"}
+            className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl disabled:opacity-60"
+            size="sm"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Schedule
+          </Button>
+
+          <Button
+            onClick={() => handlePostNowClick(post.id)}
+            disabled={post.status !== "ready"}
+            variant="outline"
+            className="flex-1 border-gray-200 rounded-xl disabled:opacity-60"
+            size="sm"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            Post Now
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // FULL CARD BODY for each post (grid vs list mode)
+  const renderPostCard = (post: PostItem) => {
+    if (viewMode === "list") {
+      // Horizontal card layout
+      return (
+        <Card
+          key={post.id}
+          className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex gap-4"
+        >
+          {/* left: thumb */}
+          {renderListImageBlock(post)}
+
+          {/* right: text/actions */}
+          {renderListTextBlock(post)}
+        </Card>
+      );
+    }
+
+    // Grid card layout: image block then content below
+    return (
+      <Card
+        key={post.id}
+        className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col"
+      >
+        {renderGridImageBlock(post)}
+
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
+
+          <div className="flex flex-wrap gap-2">
+            {post.hashtags.map((tag, idx) => (
+              <Badge
+                key={idx}
+                className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
+              >
+                {tag}
+              </Badge>
+            ))}
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              onClick={() => handleScheduleClick(post.id)}
+              disabled={post.status !== "ready"}
+              className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl disabled:opacity-60"
+              size="sm"
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              Schedule
+            </Button>
+
+            <Button
+              onClick={() => handlePostNowClick(post.id)}
+              disabled={post.status !== "ready"}
+              variant="outline"
+              className="flex-1 border-gray-200 rounded-xl disabled:opacity-60"
+              size="sm"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Post Now
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  /* ────────────────────────────────────────────────────────────────────────
      Render
      ──────────────────────────────────────────────────────────────────────── */
   return (
@@ -323,7 +549,7 @@ export default function ContentCreationHub({
         </div>
       </div>
 
-      {/* Prompt-only input */}
+      {/* Prompt box */}
       <Card className="p-6 bg-white border-0 rounded-2xl">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -350,7 +576,7 @@ export default function ContentCreationHub({
         </div>
       </Card>
 
-      {/* Posts */}
+      {/* Posts section */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <TabsList className="bg-gray-100 border border-gray-200">
@@ -362,6 +588,7 @@ export default function ContentCreationHub({
             </TabsTrigger>
           </TabsList>
 
+          {/* Toggle grid/list */}
           <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-lg p-1">
             <Button
               variant="ghost"
@@ -400,113 +627,15 @@ export default function ContentCreationHub({
                 Generate custom content using the AI prompt above.
               </p>
             </Card>
+          ) : viewMode === "grid" ? (
+            /* GRID VIEW: 3-up cards */
+            <div className="grid lg:grid-cols-3 gap-6">
+              {myPosts.map((post) => renderPostCard(post))}
+            </div>
           ) : (
-            <div
-              className={
-                viewMode === "grid" ? "grid lg:grid-cols-3 gap-6" : "space-y-4"
-              }
-            >
-              {myPosts.map((post) => (
-                <Card
-                  key={post.id}
-                  className="bg-white border-0 rounded-2xl overflow-hidden"
-                >
-                  {/* Image area with skeleton/failed/ready states */}
-                  <div className="w-full aspect-square relative">
-                    {post.status !== "ready" ? (
-                      <div className="w-full h-full">
-                        <Skeleton className="w-full h-full" />
-                        <div className="absolute inset-0 flex items-end justify-between p-3">
-                          <span className="text-white/90 text-xs bg-black/50 rounded px-2 py-1">
-                            {post.status === "processing"
-                              ? "Generating…"
-                              : "Failed"}
-                          </span>
-
-                          {post.status === "failed" && (
-                            <button
-                              className="text-white/90 text-xs bg-black/50 rounded px-2 py-1"
-                              onClick={() => {
-                                const seed =
-                                  post.caption?.replace(/^✨\s?/, "") || "";
-                                setCustomPrompt(seed);
-                                document
-                                  .querySelector("textarea")
-                                  ?.scrollIntoView({ behavior: "smooth" });
-                                promptRef.current?.focus();
-                              }}
-                            >
-                              Retry
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <ImageWithFallback
-                        src={post.image}
-                        alt={`Post ${post.id}`}
-                        className="w-full h-full object-cover"
-                        crossOrigin="anonymous"
-                        referrerPolicy="no-referrer"
-                      />
-                    )}
-
-                    {/* Overlay badges only when ready */}
-                    {post.status === "ready" && (
-                      <div className="absolute bottom-3 left-3 right-3 flex gap-2">
-                        <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
-                          <Heart className="w-4 h-4 text-white" />
-                          <span className="text-white text-sm">
-                            ~{post.predictedReach}
-                          </span>
-                        </div>
-                        <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4 text-[#00D1B2]" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Meta, caption, actions */}
-                  <div className="p-4 space-y-4">
-                    <p className="text-sm text-[#1E1E1E]">{post.caption}</p>
-
-                    <div className="flex flex-wrap gap-2">
-                      {post.hashtags.map((tag, idx) => (
-                        <Badge
-                          key={idx}
-                          className="bg-gray-100 text-[#A1A1A1] hover:bg-gray-100 text-xs"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
-                      <Button
-                        onClick={() => handleScheduleClick(post.id)}
-                        disabled={post.status !== "ready"}
-                        className="flex-1 bg-[rgb(100,100,180)] hover:bg-[#6464B4] text-white rounded-xl disabled:opacity-60"
-                        size="sm"
-                      >
-                        <Calendar className="w-4 h-4 mr-2" />
-                        Schedule
-                      </Button>
-
-                      <Button
-                        onClick={() => handlePostNowClick(post.id)}
-                        disabled={post.status !== "ready"}
-                        variant="outline"
-                        className="flex-1 border-gray-200 rounded-xl disabled:opacity-60"
-                        size="sm"
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        Post Now
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+            /* LIST VIEW: vertical stack of horizontal cards */
+            <div className="space-y-4">
+              {myPosts.map((post) => renderPostCard(post))}
             </div>
           )}
         </TabsContent>
