@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   List,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
@@ -24,6 +25,8 @@ import PaymentDialog from "./PaymentDialog";
    ──────────────────────────────────────────────── */
 const CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
 const API_BASE = ""; // keep "" if Netlify proxies /api → backend
+const LOADER_GIF =
+  "https://i.pinimg.com/originals/11/21/0f/11210f3927a5c230f28ec52b609192a2.gif";
 
 type PostStatus = "processing" | "ready" | "failed";
 
@@ -43,63 +46,34 @@ interface ContentCreationHubProps {
 }
 
 /* ────────────────────────────────────────────────
-   GLOBAL KEYFRAMES INJECTION
-   We mount this once so the browser always has the puffKeyframes CSS.
-   ──────────────────────────────────────────────── */
-function GlobalAnimationStyles() {
-  return (
-    <style>{`
-      @keyframes puffKeyframes {
-        0% {
-          transform: scale(0.5);
-          opacity: 1;
-        }
-        100% {
-          transform: scale(1.6);
-          opacity: 0;
-        }
-      }
-    `}</style>
-  );
-}
-
-/* ────────────────────────────────────────────────
    VISUAL STATES
    ──────────────────────────────────────────────── */
-function PuffLoaderBlock() {
+
+// Loader state while generating
+function LoaderBlock() {
   return (
-    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#111] via-[#232356] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden">
-      {/* animated puff container */}
-      <div className="relative w-16 h-16 mb-4 flex items-center justify-center">
-        {/* ring #1 */}
-        <span
-          className="
-            absolute block w-12 h-12 rounded-full border-4 border-white/70 opacity-80
-            animate-[puffKeyframes_1.5s_ease-out_infinite]
-          "
-        />
-        {/* ring #2, delayed */}
-        <span
-          className="
-            absolute block w-12 h-12 rounded-full border-4 border-white/30
-            animate-[puffKeyframes_1.5s_ease-out_infinite]
-          "
-          style={{ animationDelay: "0.75s" }}
+    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#111] via-[#232356] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden p-4">
+      <div className="w-20 h-20 flex items-center justify-center mb-3">
+        {/* animated GIF */}
+        <img
+          src={LOADER_GIF}
+          alt="Loading animation"
+          className="w-full h-full object-contain rounded-md pointer-events-none select-none"
         />
       </div>
 
-      {/* status text */}
-      <div className="text-xs font-medium bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.8)] text-center text-white">
-        Your post is being generated.
+      <div className="text-xs font-medium bg-black/60 backdrop-blur-sm border border-white/10 px-3 py-1 rounded-full text-center text-white shadow-[0_8px_32px_rgba(0,0,0,0.8)]">
+        Cooking your content magic… hang tight ✨
       </div>
     </div>
   );
 }
 
+// Failure state
 function FailedBlock({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#2a1a1a] via-[#3a1f1f] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden">
-      <div className="flex flex-col items-center gap-2 z-10">
+    <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#2a1a1a] via-[#3a1f1f] to-[#000] flex flex-col items-center justify-center text-white relative overflow-hidden p-4">
+      <div className="flex flex-col items-center gap-2 z-10 text-center">
         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs">
           <RefreshCw className="w-4 h-4 text-white" />
           <span>Generation failed</span>
@@ -120,23 +94,28 @@ function FailedBlock({ onRetry }: { onRetry: () => void }) {
    ──────────────────────────────────────────────── */
 async function generateImageFromBackend(prompt: string) {
   const body = { prompt, characterId: CHARACTER_ID };
+
   const res = await fetch(`${API_BASE}/api/v1/generate-image`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
-    `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
+    `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
+    `Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
+
   const res = await fetch(`${API_BASE}/api/v1/generate-text`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: gptPrompt, characterId: CHARACTER_ID }),
   });
+
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return typeof data === "string" ? data : "";
@@ -163,13 +142,17 @@ export default function ContentCreationHub({
 }: ContentCreationHubProps) {
   const [customPrompt, setCustomPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+
   const [myPosts, setMyPosts] = useState<PostItem[]>([]);
   const [nextId, setNextId] = useState(100);
+
   const [activeTab, setActiveTab] = useState("my-posts");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
   const [showTrainDialog, setShowTrainDialog] = useState(false);
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
   /* ───────── GENERATE FLOW ───────── */
@@ -181,6 +164,7 @@ export default function ContentCreationHub({
 
     setGenerating(true);
 
+    // optimistic placeholder post
     const optimisticId = nextId;
     const optimistic: PostItem = {
       id: optimisticId,
@@ -248,21 +232,29 @@ export default function ContentCreationHub({
     }
   };
 
+  /* ───────── DELETE POST ───────── */
+  const handleDeletePost = (postId: number) => {
+    setMyPosts((prev) => prev.filter((p) => p.id !== postId));
+  };
+
   /* ───────── CARD RENDER HELPERS ───────── */
 
-  // GRID CARD: large square preview
+  // GRID CARD (3-column mode)
   const GridCard = (post: PostItem) => (
     <Card
       key={post.id}
       className="bg-white border-0 rounded-2xl overflow-hidden flex flex-col"
     >
+      {/* VISUAL AREA */}
       <div className="w-full aspect-square">
-        {post.status === "processing" && <PuffLoaderBlock />}
+        {post.status === "processing" && <LoaderBlock />}
 
         {post.status === "failed" && (
           <FailedBlock
             onRetry={() => {
-              // optional: pre-fill prompt to retry
+              // could trigger retry flow if you want
+              setCustomPrompt(post.caption || "");
+              promptRef.current?.focus();
             }}
           />
         )}
@@ -278,12 +270,10 @@ export default function ContentCreationHub({
             />
 
             {/* overlay stats */}
-            <div className="absolute bottom-3 left-3 right-3 flex gap-2">
-              <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
+            <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+              <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2 text-white text-sm">
                 <Heart className="w-4 h-4 text-white" />
-                <span className="text-white text-sm">
-                  ~{post.predictedReach}
-                </span>
+                <span>~{post.predictedReach}</span>
               </div>
               <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-[#00D1B2]" />
@@ -293,12 +283,11 @@ export default function ContentCreationHub({
         )}
       </div>
 
+      {/* BODY (only if ready) */}
       {post.status === "ready" && (
         <div className="p-4 space-y-4">
           {post.caption && (
-            <p className="text-sm text-[#1E1E1E] break-words">
-              {post.caption}
-            </p>
+            <p className="text-sm text-[#1E1E1E] break-words">{post.caption}</p>
           )}
 
           {post.hashtags.length > 0 && (
@@ -314,17 +303,28 @@ export default function ContentCreationHub({
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
-            <Button className="flex-1 bg-[rgb(100,100,180)] text-white rounded-xl hover:bg-[#6464B4]">
-              <Calendar className="w-4 h-4 mr-2" />
-              Schedule
-            </Button>
+          <div className="flex flex-col gap-2 pt-2">
+            <div className="flex gap-2">
+              <Button className="flex-1 bg-[rgb(100,100,180)] text-white rounded-xl hover:bg-[#6464B4]">
+                <Calendar className="w-4 h-4 mr-2" />
+                Schedule
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-gray-200 rounded-xl"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Post Now
+              </Button>
+            </div>
+
             <Button
-              variant="outline"
-              className="flex-1 border-gray-200 rounded-xl"
+              variant="ghost"
+              className="text-red-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center gap-2 text-xs font-medium rounded-xl"
+              onClick={() => handleDeletePost(post.id)}
             >
-              <Send className="w-4 h-4 mr-2" />
-              Post Now
+              <Trash2 className="w-4 h-4" />
+              Delete post
             </Button>
           </div>
         </div>
@@ -332,20 +332,21 @@ export default function ContentCreationHub({
     </Card>
   );
 
-  // LIST CARD: small thumbnail (200x200) + details to the right
+  // LIST CARD (thumbnail left, content right)
   const ListCard = (post: PostItem) => (
     <Card
       key={post.id}
       className="bg-white border-0 rounded-2xl overflow-hidden p-4 flex flex-row gap-4 items-start"
     >
-      {/* left media cell */}
+      {/* LEFT MEDIA COLUMN (fixed size) */}
       <div className="w-[200px] h-[200px] rounded-xl overflow-hidden flex-shrink-0 flex-grow-0 bg-gray-100">
-        {post.status === "processing" && <PuffLoaderBlock />}
+        {post.status === "processing" && <LoaderBlock />}
 
         {post.status === "failed" && (
           <FailedBlock
             onRetry={() => {
-              // optional: pre-fill prompt to retry
+              setCustomPrompt(post.caption || "");
+              promptRef.current?.focus();
             }}
           />
         )}
@@ -361,7 +362,7 @@ export default function ContentCreationHub({
         )}
       </div>
 
-      {/* right content cell */}
+      {/* RIGHT CONTENT COLUMN */}
       {post.status === "ready" ? (
         <div className="flex flex-col justify-between flex-1 min-w-0">
           <div className="space-y-3">
@@ -370,6 +371,7 @@ export default function ContentCreationHub({
                 {post.caption}
               </p>
             )}
+
             {post.hashtags.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {post.hashtags.map((tag, i) => (
@@ -384,24 +386,35 @@ export default function ContentCreationHub({
             )}
           </div>
 
-          <div className="flex gap-2 pt-4">
-            <Button className="flex-1 bg-[rgb(100,100,180)] text-white rounded-xl hover:bg-[#6464B4]">
-              <Calendar className="w-4 h-4 mr-2" />
-              Schedule
-            </Button>
+          <div className="flex flex-col gap-2 pt-4">
+            <div className="flex gap-2">
+              <Button className="flex-1 bg-[rgb(100,100,180)] text-white rounded-xl hover:bg-[#6464B4]">
+                <Calendar className="w-4 h-4 mr-2" />
+                Schedule
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-gray-200 rounded-xl"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Post Now
+              </Button>
+            </div>
+
             <Button
-              variant="outline"
-              className="flex-1 border-gray-200 rounded-xl"
+              variant="ghost"
+              className="text-red-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-start gap-2 text-xs font-medium rounded-xl self-start"
+              onClick={() => handleDeletePost(post.id)}
             >
-              <Send className="w-4 h-4 mr-2" />
-              Post Now
+              <Trash2 className="w-4 h-4" />
+              Delete post
             </Button>
           </div>
         </div>
       ) : (
         <div className="flex items-center flex-1 min-w-0 text-[11px] text-gray-500 leading-tight">
           {post.status === "processing"
-            ? "Your post is being generated."
+            ? "Cooking your content magic… hang tight ✨"
             : "Generation failed. Try again."}
         </div>
       )}
@@ -411,10 +424,7 @@ export default function ContentCreationHub({
   /* ───────── RENDER ───────── */
   return (
     <div className="space-y-6">
-      {/* global keyframes for puff animation */}
-      <GlobalAnimationStyles />
-
-      {/* Header */}
+      {/* Page header */}
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           <h1 className="text-3xl text-[#1E1E1E] mb-2">Create Content</h1>
@@ -463,7 +473,7 @@ export default function ContentCreationHub({
             </TabsTrigger>
           </TabsList>
 
-          {/* view toggle */}
+          {/* grid/list toggle */}
           <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-lg p-1">
             <Button
               variant="ghost"
