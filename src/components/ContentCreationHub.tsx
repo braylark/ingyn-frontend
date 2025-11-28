@@ -30,7 +30,7 @@ import PaymentDialog from "./PaymentDialog";
 /* ──────────────────────────────────────────────── */
 const AVATAR_STORAGE_KEY = "ingyn_selected_avatar";
 const DEFAULT_CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46"; // Lyra default
-const API_BASE = "";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const LOADER_GIF =
   "https://i.pinimg.com/originals/54/58/a1/5458a14ae4c8f07055b7441ff0f234cf.gif";
 
