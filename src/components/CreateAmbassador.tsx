@@ -27,21 +27,22 @@ interface CreateAmbassadorProps {
   onBack?: () => void;
 }
 
+const AVATAR_STORAGE_KEY = "ingyn_selected_avatar";
+
 const avatarOptions = [
   {
-    id: 1,
+    id: "lyra",
+    name: "Lyra Solara",
+    characterId: "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46",
     url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    alt: "Avatar Option 1"
+    alt: "Lyra Solara avatar"
   },
   {
-    id: 2,
+    id: "mello",
+    name: "Mello Bolt",
+    characterId: "c9744a0c-2426-4f20-8be9-2722fb8e3dd4",
     url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    alt: "Avatar Option 2"
-  },
-  {
-    id: 3,
-    url: "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    alt: "Avatar Option 3"
+    alt: "Mello Bolt avatar"
   }
 ];
 
@@ -91,8 +92,23 @@ export default function CreateAmbassador({ onComplete, onBack }: CreateAmbassado
     bold: 50
   });
 
-  // Compute preview summary
-  const [previewSummary, setPreviewSummary] = useState("");
+  // Load previously selected avatar from localStorage, if any
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(AVATAR_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as { id?: string };
+      if (!parsed?.id) return;
+      const foundIndex = avatarOptions.findIndex((a) => a.id === parsed.id);
+      if (foundIndex >= 0) {
+        setSelectedAvatar(foundIndex);
+      }
+    } catch {
+      // ignore parsing errors
+    }
+  }, []);
+const [previewSummary, setPreviewSummary] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
@@ -116,7 +132,58 @@ export default function CreateAmbassador({ onComplete, onBack }: CreateAmbassado
     setShowPreview(ambassadorName.length > 0 || summary.length > 0);
   }, [brandStory, primaryFocus, contentKeywords, selectedValues, ambassadorName]);
 
+  const handleValueToggle = (value: string) => {
+    setSelectedValues(prev => 
+      prev.includes(value) 
+        ? prev.filter(v => v !== value)
+        : [...prev, value]
+    );
+  };
+
+  const handleThemeToggle = (theme: string) => {
+    setSelectedThemes(prev =>
+      prev.includes(theme)
+        ? prev.filter(t => t !== theme)
+        : [...prev, theme]
+    );
+  };
+
+  const handleToneChange = (label: string, value: number[]) => {
+    setToneSliders(prev => ({
+      ...prev,
+      [label.toLowerCase()]: value[0]
+    }));
+  };
+
+  const getToneLabel = (value: number) => {
+    if (value < 35) return "Subtle";
+    if (value < 65) return "Balanced";
+    return "Strong";
+  };
+
+  const toneDescriptions: Record<string, string> = {
+    friendly: "How warm and approachable your ambassador sounds.",
+    casual: "How conversational vs. polished and formal the voice is.",
+    playful: "How fun and energetic vs. grounded and serious the tone feels.",
+    bold: "How direct and opinionated vs. safe and neutral the messaging is."
+  };
+
+  const progressSteps = [
+    ambassadorName.length > 0,
+    primaryFocus.length > 0,
+    selectedValues.length > 0,
+    targetAudience.length > 0,
+    brandPhrases.length > 0,
+    Object.values(toneSliders).some(v => v !== 50),
+  ];
+
+  const progressPercentage = (progressSteps.filter(Boolean).length / progressSteps.length) * 100;
+
   const handleContinue = () => {
+    if (typeof window !== "undefined") {
+      const selected = avatarOptions[selectedAvatar] ?? avatarOptions[0];
+      window.localStorage.setItem(AVATAR_STORAGE_KEY, JSON.stringify(selected));
+    }
     if (onComplete) {
       onComplete();
     }
@@ -128,92 +195,403 @@ export default function CreateAmbassador({ onComplete, onBack }: CreateAmbassado
     if (currentIndex < tabs.length - 1) {
       setActiveTab(tabs[currentIndex + 1]);
     } else {
-      // If on last tab, complete the setup
       handleContinue();
     }
   };
 
-  const toggleValue = (value: string) => {
-    setSelectedValues(prev => 
-      prev.includes(value) 
-        ? prev.filter(v => v !== value)
-        : [...prev, value]
-    );
-  };
-
-  const toggleTheme = (theme: string) => {
-    setSelectedThemes(prev => 
-      prev.includes(theme) 
-        ? prev.filter(t => t !== theme)
-        : [...prev, theme]
-    );
-  };
-
   return (
-    <div className="min-h-screen bg-[#F5F6FA]">
-      {/* Fixed Header Section */}
-      <div className="sticky top-0 z-10 bg-[#F5F6FA] p-4 md:p-6 pb-0">
-        <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
-          {/* Back Button */}
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="flex items-center gap-2 text-[#1E1E1E] hover:text-[#6464B4] transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
-            </button>
-          )}
-
-          <div className="text-[#1E1E1E] space-y-2">
-            <h1 className="text-2xl md:text-3xl">Let's Train Your AI Ambassador</h1>
-            <p className="text-sm md:text-base text-gray-600">
-              Help us understand your brand's soul so your AI can authentically represent you. The more details you provide, the better your AI ambassador will understand and embody your brand's unique personality and values.
-            </p>
+    <div className="min-h-screen bg-[#F5F5FA]">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6 md:mb-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full border border-gray-200 hover:bg-white"
+            onClick={onBack}
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-[#6464B4]/10 text-[#6464B4] border-0">
+                Step 1 of 3
+              </Badge>
+              <span className="text-xs text-[#A1A1A1]">
+                Define your AI ambassador&apos;s core identity
+              </span>
+            </div>
+            <h1 className="text-xl md:text-2xl font-semibold text-[#1E1E1E] mt-1">
+              Design your AI Brand Ambassador
+            </h1>
           </div>
         </div>
-      </div>
 
-      {/* Scrollable Content Area */}
-      <div className="p-4 md:p-6 pt-4 md:pt-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
-          {/* Left Side - AI Insights & Live Preview */}
-          <div className="space-y-4 md:space-y-6">
-            {/* AI Insights */}
-            <Card className="p-4 md:p-6 bg-gradient-to-br from-[#6464B4] to-[#5454A0] border-0 rounded-2xl">
-              <div className="flex gap-3 md:gap-4">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Lightbulb className="w-5 h-5 text-white" />
-                </div>
-                <div className="space-y-1 md:space-y-2">
-                  <h3 className="text-white">AI Insights</h3>
-                  <p className="text-sm text-white/90">
-                    The more details you provide, the better your AI ambassador will understand 
-                    and embody your brand's unique personality and values.
-                  </p>
+        {/* Progress bar */}
+        <div className="mb-6">
+          <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-[#6464B4] to-[#F97316] transition-all duration-700"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-[#A1A1A1]">
+              The more context you give, the smarter your content will feel.
+            </span>
+            <span className="text-xs text-[#6464B4] font-medium">
+              {Math.round(progressPercentage)}% complete
+            </span>
+          </div>
+        </div>
+
+        {/* Layout */}
+        <div className="grid lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.1fr)] gap-6 md:gap-8 items-start">
+          {/* Left: Form */}
+          <Card className="p-4 md:p-6 bg-white border-0 rounded-2xl">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4 md:mb-6">
+                <TabsList className="grid grid-cols-4 w-full md:w-auto bg-[#F5F5FA] rounded-full p-1">
+                  <TabsTrigger value="identity" className="text-xs md:text-sm rounded-full data-[state=active]:bg-white">
+                    Identity
+                  </TabsTrigger>
+                  <TabsTrigger value="values" className="text-xs md:text-sm rounded-full data-[state=active]:bg-white">
+                    Values
+                  </TabsTrigger>
+                  <TabsTrigger value="audience" className="text-xs md:text-sm rounded-full data-[state=active]:bg-white">
+                    Audience
+                  </TabsTrigger>
+                  <TabsTrigger value="voice" className="text-xs md:text-sm rounded-full data-[state=active]:bg-white">
+                    Voice
+                  </TabsTrigger>
+                </TabsList>
+
+                <div className="flex items-center gap-2 text-xs text-[#A1A1A1]">
+                  <Sparkles className="w-4 h-4 text-[#6464B4]" />
+                  <span>Ingyn will auto-train using these answers.</span>
                 </div>
               </div>
-            </Card>
 
-            {/* Live Preview - Sticky */}
-            <Card className="p-4 md:p-6 bg-white border-0 rounded-2xl lg:sticky lg:top-24">
-              <div className="space-y-3 md:space-y-4">
+              {/* Identity tab */}
+              <TabsContent value="identity" className="space-y-5 md:space-y-6 mt-0">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Sparkles className="w-4 h-4 text-[#6464B4]" />
+                    Ambassador Name
+                  </Label>
+                  <Input
+                    placeholder="e.g., Lyra, Mello, or your brand name"
+                    value={ambassadorName}
+                    onChange={(e) => setAmbassadorName(e.target.value)}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4]"
+                  />
+                  <p className="text-xs text-[#A1A1A1]">
+                    This is the name your audience will see—keep it memorable and aligned with your brand.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <BookOpen className="w-4 h-4 text-[#F97316]" />
+                    Brand Story (optional)
+                  </Label>
+                  <Textarea
+                    placeholder="Share a short story of your brand and what this ambassador represents."
+                    value={brandStory}
+                    onChange={(e) => setBrandStory(e.target.value)}
+                    rows={4}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4] resize-none"
+                  />
+                  <p className="text-xs text-[#A1A1A1]">
+                    Not required, but a clear story helps your ambassador speak with more emotional context.
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                      <Target className="w-4 h-4 text-[#6464B4]" />
+                      Primary Focus
+                    </Label>
+                    <Input
+                      placeholder="e.g., content marketing, wellness tips, SaaS growth"
+                      value={primaryFocus}
+                      onChange={(e) => setPrimaryFocus(e.target.value)}
+                      className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4]"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                      <MessageCircle className="w-4 h-4 text-[#6464B4]" />
+                      Core Topics / Keywords
+                    </Label>
+                    <Input
+                      placeholder="Separate with commas — e.g., short-form video, funnels, email automation"
+                      value={contentKeywords}
+                      onChange={(e) => setContentKeywords(e.target.value)}
+                      className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <TrendingUp className="w-4 h-4 text-[#F97316]" />
+                    What makes this ambassador unique?
+                  </Label>
+                  <Input
+                    placeholder="e.g., playful but data-driven, calm and grounding, ruthless with fluff, etc."
+                    value={uniqueTrait}
+                    onChange={(e) => setUniqueTrait(e.target.value)}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4]"
+                  />
+                </div>
+              </TabsContent>
+
+              {/* Values tab */}
+              <TabsContent value="values" className="space-y-5 md:space-y-6 mt-0">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Heart className="w-4 h-4 text-[#F97316]" />
+                    Core Values
+                  </Label>
+                  <p className="text-xs text-[#A1A1A1] mb-2">
+                    Choose up to 4 values that your ambassador should embody in every piece of content.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {brandValues.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleValueToggle(value)}
+                        className={`px-3 py-1 rounded-full text-xs border transition-all ${
+                          selectedValues.includes(value)
+                            ? "bg-[#6464B4] text-white border-[#6464B4] shadow-sm"
+                            : "bg-white text-[#1E1E1E] border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Lightbulb className="w-4 h-4 text-[#F97316]" />
+                    Brand Personality (optional)
+                  </Label>
+                  <Textarea
+                    placeholder="Describe your brand’s personality in your own words."
+                    value={personality}
+                    onChange={(e) => setPersonality(e.target.value)}
+                    rows={3}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4] resize-none"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Sparkles className="w-4 h-4 text-[#6464B4]" />
+                    Content Themes
+                  </Label>
+                  <p className="text-xs text-[#A1A1A1]">
+                    Select the content types this ambassador should prioritize.
+                  </p>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {contentThemes.map((theme) => (
+                      <button
+                        key={theme}
+                        type="button"
+                        onClick={() => handleThemeToggle(theme)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs border transition-all ${
+                          selectedThemes.includes(theme)
+                            ? "bg-[#6464B4] text-white border-[#6464B4] shadow-sm"
+                            : "bg-white text-[#1E1E1E] border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <span>{theme}</span>
+                        {selectedThemes.includes(theme) && (
+                          <Check className="w-3 h-3" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Audience tab */}
+              <TabsContent value="audience" className="space-y-5 md:space-y-6 mt-0">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Users className="w-4 h-4 text-[#6464B4]" />
+                    Who are you speaking to?
+                  </Label>
+                  <Textarea
+                    placeholder="Describe your ideal audience. e.g., early-stage founders, busy moms building side hustles, wellness creators…"
+                    value={targetAudience}
+                    onChange={(e) => setTargetAudience(e.target.value)}
+                    rows={3}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4] resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <MessageCircle className="w-4 h-4 text-[#F97316]" />
+                    What are they struggling with?
+                  </Label>
+                  <Textarea
+                    placeholder="List their top challenges, fears, or blockers that your content should address."
+                    value={audienceChallenges}
+                    onChange={(e) => setAudienceChallenges(e.target.value)}
+                    rows={3}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4] resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Heart className="w-4 h-4 text-[#F97316]" />
+                    How should they feel after engaging?
+                  </Label>
+                  <Input
+                    placeholder="e.g., clear on next steps, empowered, calm, fired up, ready to take action"
+                    value={desiredFeeling}
+                    onChange={(e) => setDesiredFeeling(e.target.value)}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4]"
+                  />
+                </div>
+              </TabsContent>
+
+              {/* Voice tab */}
+              <TabsContent value="voice" className="space-y-5 md:space-y-6 mt-0">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Sparkles className="w-4 h-4 text-[#6464B4]" />
+                    Signature phrases (optional)
+                  </Label>
+                  <Textarea
+                    placeholder='Any recurring phrases, taglines, or sayings? e.g., "Let&apos;s get tactical", "Stay wealthy, not just busy."'
+                    value={brandPhrases}
+                    onChange={(e) => setBrandPhrases(e.target.value)}
+                    rows={3}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4] resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <MessageCircle className="w-4 h-4 text-[#F97316]" />
+                    Words or angles to avoid (optional)
+                  </Label>
+                  <Textarea
+                    placeholder="Anything your ambassador should never say, promise, or lean into."
+                    value={avoidPhrases}
+                    onChange={(e) => setAvoidPhrases(e.target.value)}
+                    rows={3}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4] resize-none"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                      <Sparkles className="w-4 h-4 text-[#6464B4]" />
+                      Tone controls
+                    </Label>
+                    <span className="text-xs text-[#A1A1A1]">
+                      Dial in how your ambassador should sound across content.
+                    </span>
+                  </div>
+
+                  {toneAttributes.map(({ label, opposite }) => {
+                    const key = label.toLowerCase();
+                    const value = toneSliders[key];
+                    return (
+                      <div key={label} className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[#1E1E1E]">
+                            {label} vs. {opposite}
+                          </span>
+                          <span className="text-[#6464B4] font-medium">
+                            {getToneLabel(value)} emphasis
+                          </span>
+                        </div>
+                        <Slider
+                          value={[value]}
+                          min={0}
+                          max={100}
+                          step={1}
+                          onValueChange={(v) => handleToneChange(label, v)}
+                          className="cursor-pointer"
+                        />
+                        <p className="text-[11px] text-[#A1A1A1]">
+                          {toneDescriptions[key]}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                    <Target className="w-4 h-4 text-[#6464B4]" />
+                    Call-to-action style (optional)
+                  </Label>
+                  <Input
+                    placeholder="e.g., soft invitations, direct commands, story-led CTAs, etc."
+                    value={ctaStyle}
+                    onChange={(e) => setCtaStyle(e.target.value)}
+                    className="rounded-xl border-gray-200 focus-visible:ring-[#6464B4]"
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            {/* Footer buttons */}
+            <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 mt-6">
+              <Button
+                variant="outline"
+                className="order-2 md:order-1 rounded-xl border-gray-200 text-[#1E1E1E]"
+                onClick={handleSkipSection}
+              >
+                Skip for now
+              </Button>
+              <Button
+                className="order-1 md:order-2 rounded-xl bg-[#1E1E1E] hover:bg-black text-sm px-6"
+                onClick={handleContinue}
+              >
+                Save & Continue
+              </Button>
+            </div>
+          </Card>
+
+          {/* Right: Live preview */}
+          <div className="space-y-4">
+            <Card className="p-4 md:p-6 bg-white border-0 rounded-2xl">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[#1E1E1E]">Live Preview</h3>
-                  <Badge className="bg-[#6464B4]/10 text-[#6464B4] hover:bg-[#6464B4]/10">
-                    AI Generated
+                  <h3 className="text-[#1E1E1E] text-sm font-medium">Live ambassador preview</h3>
+                  <Badge className="bg-[#6464B4]/10 text-[#6464B4] border-0">
+                    AI-assisted
                   </Badge>
                 </div>
 
                 {/* Avatar Selection */}
                 <div>
                   <Label className="text-sm text-[#1E1E1E] mb-3 block">Choose Avatar Style</Label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     {avatarOptions.map((avatar, index) => (
                       <button
                         key={avatar.id}
-                        onClick={() => setSelectedAvatar(index)}
+                        onClick={() => {
+                        setSelectedAvatar(index);
+                        if (typeof window !== "undefined") {
+                          const selected = avatarOptions[index];
+                          window.localStorage.setItem(AVATAR_STORAGE_KEY, JSON.stringify(selected));
+                        }
+                      }}
                         className={`relative rounded-xl overflow-hidden border-2 transition-all aspect-square ${
                           selectedAvatar === index
                             ? "border-[#6464B4] shadow-lg"
@@ -239,442 +617,120 @@ export default function CreateAmbassador({ onComplete, onBack }: CreateAmbassado
 
                 {/* Ambassador Card */}
                 <div className="space-y-3 pt-4 border-t border-gray-200">
-                  <AnimatePresence mode="wait">
-                    {showPreview ? (
-                      <motion.div
-                        key="filled-preview"
-                        initial={{ opacity: 0, y: 10 }}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#F5F5FA] flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-[#6464B4]" />
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-[#A1A1A1]">
+                        Brand Ambassador
+                      </p>
+                      <p className="text-sm font-medium text-[#1E1E1E]">
+                        {ambassadorName || "Your AI Brand Ambassador"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {showPreview && (
+                      <motion.p
+                        initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-3"
+                        exit={{ opacity: 0, y: 4 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-sm text-[#4B4B4B]"
                       >
-                        <div className="flex items-center gap-3">
-                          <motion.div 
-                            className="w-12 h-12 bg-gradient-to-br from-[#6464B4] to-[#5454A0] rounded-full flex items-center justify-center text-white"
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-                          >
-                            {ambassadorName ? ambassadorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '?'}
-                          </motion.div>
-                          <div className="flex-1 min-w-0">
-                            <motion.h4 
-                              className="text-[#1E1E1E] truncate"
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: 0.2 }}
-                            >
-                              {ambassadorName || "Your Ambassador"}
-                            </motion.h4>
-                            <motion.p 
-                              className="text-sm text-[#A1A1A1] truncate"
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: 0.25 }}
-                            >
-                              {primaryFocus || "AI Ambassador"}
-                            </motion.p>
-                          </div>
-                        </div>
-
-                        {previewSummary && (
-                          <motion.p 
-                            className="text-sm text-[#1E1E1E]/70"
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ delay: 0.3 }}
-                          >
-                            {previewSummary}
-                          </motion.p>
-                        )}
-
-                        {selectedValues.length > 0 && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            transition={{ delay: 0.4 }}
-                          >
-                            <p className="text-xs text-[#A1A1A1] mb-2">Core Values</p>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedValues.slice(0, 4).map((value, index) => (
-                                <motion.span 
-                                  key={value} 
-                                  className="px-3 py-1 bg-[#6464B4]/10 text-[#6464B4] rounded-full text-sm"
-                                  initial={{ opacity: 0, scale: 0 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  transition={{ delay: 0.5 + (index * 0.05), type: "spring" }}
-                                >
-                                  {value}
-                                </motion.span>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="empty-preview"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="text-center py-8"
+                        {previewSummary || "We’ll generate a smart summary of your ambassador as you fill this out."}
+                      </motion.p>
+                    )}
+                    {!showPreview && (
+                      <motion.p
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-sm text-[#A1A1A1]"
                       >
-                        <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                          <Sparkles className="w-8 h-8 text-gray-400" />
-                        </div>
-                        <p className="text-sm text-[#A1A1A1]">
-                          Start filling in the form to see your AI ambassador come to life
-                        </p>
-                      </motion.div>
+                        As you define your ambassador, we&apos;ll summarize how they show up online here.
+                      </motion.p>
                     )}
                   </AnimatePresence>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs pt-2">
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-[#A1A1A1] flex items-center gap-1">
+                        <Target className="w-3 h-3 text-[#6464B4]" />
+                        Focus
+                      </p>
+                      <p className="text-[#1E1E1E]">
+                        {primaryFocus || "We’ll infer this from your topics."}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-[#A1A1A1] flex items-center gap-1">
+                        <Users className="w-3 h-3 text-[#6464B4]" />
+                        Audience
+                      </p>
+                      <p className="text-[#1E1E1E]">
+                        {targetAudience || "Your ideal followers and customers."}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-[#A1A1A1] flex items-center gap-1">
+                        <Heart className="w-3 h-3 text-[#F97316]" />
+                        Feeling
+                      </p>
+                      <p className="text-[#1E1E1E]">
+                        {desiredFeeling || "Energized, understood, and ready to act."}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-[#A1A1A1] flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-[#6464B4]" />
+                        Signature
+                      </p>
+                      <p className="text-[#1E1E1E]">
+                        {uniqueTrait || "A distinct POV shaped by your brand’s DNA."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    transition={{ delay: 0.2 }}
+                    className="pt-2"
+                  >
+                    <p className="text-xs text-[#A1A1A1] mb-2">Core values</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedValues.length > 0 ? (
+                        selectedValues.slice(0, 4).map((value, index) => (
+                          <motion.span 
+                            key={value} 
+                            className="px-3 py-1 bg-[#6464B4]/10 text-[#6464B4] rounded-full text-[11px]"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.25 + index * 0.05 }}
+                          >
+                            {value}
+                          </motion.span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[#A1A1A1]">
+                          Selected values will appear here as part of your ambassador&apos;s identity.
+                        </span>
+                      )}
+                    </div>
+                  </motion.div>
+                </div>
+
+                <div className="mt-2 p-3 rounded-xl bg-[#F5F5FA] border border-dashed border-gray-200 flex items-start gap-2">
+                  <BookOpen className="w-4 h-4 text-[#6464B4] mt-0.5" />
+                  <p className="text-xs text-[#4B4B4B]">
+                    These settings help Ingyn and your Higgsfield character align content, visuals, and captions
+                    with your brand&apos;s identity automatically—so you spend less time rewriting.
+                  </p>
                 </div>
               </div>
-            </Card>
-
-          </div>
-
-          {/* Right Side - Training Form - Scrollable */}
-          <div>
-            <Card className="bg-white border-0 rounded-2xl">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <div className="p-4 md:p-6 pb-0">
-                  <TabsList className="w-full grid grid-cols-4 mb-4 md:mb-6">
-                  <TabsTrigger value="identity" className="flex items-center gap-1 md:gap-2 px-2 md:px-4">
-                    <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="text-xs md:text-sm">Identity</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="values" className="flex items-center gap-1 md:gap-2 px-2 md:px-4">
-                    <Heart className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="text-xs md:text-sm">Values</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="audience" className="flex items-center gap-1 md:gap-2 px-2 md:px-4">
-                    <Users className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="text-xs md:text-sm">Audience</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="voice" className="flex items-center gap-1 md:gap-2 px-2 md:px-4">
-                    <MessageCircle className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="text-xs md:text-sm">Voice</span>
-                  </TabsTrigger>
-                  </TabsList>
-                </div>
-
-                {/* Form Content */}
-                <div className="px-4 md:px-6 pb-4 md:pb-6">
-                  {/* Identity Tab */}
-                  <TabsContent value="identity" className="space-y-4 mt-0">
-                  <div>
-                    <Label className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-[#6464B4]" />
-                      Ambassador Name
-                    </Label>
-                    <Input
-                      placeholder="e.g., Maya Wellness"
-                      className="rounded-xl border-gray-200"
-                      value={ambassadorName}
-                      onChange={(e) => setAmbassadorName(e.target.value)}
-                    />
-                    <p className="text-xs text-[#A1A1A1] mt-1">
-                      Choose a name that reflects your brand identity
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label className="flex items-center gap-2 mb-2">
-                      <BookOpen className="w-4 h-4 text-[#6464B4]" />
-                      Brand Story
-                    </Label>
-                    <Textarea
-                      placeholder="What's your brand's mission? What inspired you to start? What problem are you solving?"
-                      className="rounded-xl border-gray-200 min-h-[120px]"
-                      value={brandStory}
-                      onChange={(e) => setBrandStory(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="flex items-center gap-2 mb-2">
-                      <Target className="w-4 h-4 text-[#6464B4]" />
-                      Primary Focus
-                    </Label>
-                    <Input
-                      placeholder="e.g., Wellness, Technology, Fashion, Finance"
-                      className="rounded-xl border-gray-200"
-                      value={primaryFocus}
-                      onChange={(e) => setPrimaryFocus(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="flex items-center gap-2 mb-2">
-                      <TrendingUp className="w-4 h-4 text-[#6464B4]" />
-                      Content Keywords
-                    </Label>
-                    <Input
-                      placeholder="fitness, wellness, mindfulness, nutrition..."
-                      className="rounded-xl border-gray-200"
-                      value={contentKeywords}
-                      onChange={(e) => setContentKeywords(e.target.value)}
-                    />
-                    <p className="text-xs text-[#A1A1A1] mt-1">
-                      Separate with commas - these guide content generation
-                    </p>
-                  </div>
-                  </TabsContent>
-
-                  {/* Values Tab */}
-                  <TabsContent value="values" className="space-y-4 mt-0">
-                  <div>
-                    <Label className="mb-3 block">
-                      What core values drive your brand?
-                    </Label>
-                    <p className="text-sm text-[#A1A1A1] mb-3">
-                      Select all that apply - this shapes how your AI represents you
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 md:gap-3">
-                      {brandValues.map(value => (
-                        <button
-                          key={value}
-                          onClick={() => toggleValue(value)}
-                          className={`p-2 md:p-3 rounded-xl border-2 transition-all text-left ${
-                            selectedValues.includes(value)
-                              ? "border-[#6464B4] bg-[#6464B4]/10"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-4 h-4 md:w-5 md:h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
-                              selectedValues.includes(value)
-                                ? "border-[#6464B4] bg-[#6464B4]"
-                                : "border-gray-300"
-                            }`}>
-                              {selectedValues.includes(value) && (
-                                <Check className="w-2.5 h-2.5 md:w-3 md:h-3 text-white" />
-                              )}
-                            </div>
-                            <span className="text-xs md:text-sm text-[#1E1E1E]">{value}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      What makes your brand unique?
-                    </Label>
-                    <Textarea
-                      placeholder="What sets you apart from competitors? What's your unique perspective or approach?"
-                      className="rounded-xl border-gray-200 min-h-[100px]"
-                      value={uniqueTrait}
-                      onChange={(e) => setUniqueTrait(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      Brand Personality Traits
-                    </Label>
-                    <Textarea
-                      placeholder="If your brand was a person, how would you describe their personality?"
-                      className="rounded-xl border-gray-200 min-h-[80px]"
-                      value={personality}
-                      onChange={(e) => setPersonality(e.target.value)}
-                    />
-                  </div>
-                  </TabsContent>
-
-                  {/* Audience Tab */}
-                  <TabsContent value="audience" className="space-y-4 mt-0">
-                  <div>
-                    <Label className="mb-2 block">
-                      Who is your target audience?
-                    </Label>
-                    <Textarea
-                      placeholder="Describe age, interests, lifestyle, goals... Who are you trying to reach?"
-                      className="rounded-xl border-gray-200 min-h-[100px]"
-                      value={targetAudience}
-                      onChange={(e) => setTargetAudience(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      What are their biggest challenges?
-                    </Label>
-                    <Textarea
-                      placeholder="What problems does your audience face? What keeps them up at night?"
-                      className="rounded-xl border-gray-200 min-h-[100px]"
-                      value={audienceChallenges}
-                      onChange={(e) => setAudienceChallenges(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      How do you want them to feel?
-                    </Label>
-                    <Input
-                      placeholder="e.g., Inspired, Empowered, Informed, Entertained"
-                      className="rounded-xl border-gray-200"
-                      value={desiredFeeling}
-                      onChange={(e) => setDesiredFeeling(e.target.value)}
-                    />
-                    <p className="text-xs text-[#A1A1A1] mt-1">
-                      This guides the emotional tone of your content
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label className="mb-3 block">
-                      Preferred content themes
-                    </Label>
-                    <div className="grid grid-cols-2 gap-2 md:gap-3">
-                      {contentThemes.map(theme => (
-                        <button
-                          key={theme}
-                          onClick={() => toggleTheme(theme)}
-                          className={`p-2 md:p-3 rounded-xl border-2 transition-all text-left ${
-                            selectedThemes.includes(theme)
-                              ? "border-[#6464B4] bg-[#6464B4]/10"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-4 h-4 md:w-5 md:h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
-                              selectedThemes.includes(theme)
-                                ? "border-[#6464B4] bg-[#6464B4]"
-                                : "border-gray-300"
-                            }`}>
-                              {selectedThemes.includes(theme) && (
-                                <Check className="w-2.5 h-2.5 md:w-3 md:h-3 text-white" />
-                              )}
-                            </div>
-                            <span className="text-xs md:text-sm text-[#1E1E1E]">{theme}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  </TabsContent>
-
-                  {/* Voice Tab */}
-                  <TabsContent value="voice" className="space-y-4 mt-0">
-                  <div>
-                    <Label className="mb-3 block">
-                      Define your brand's voice
-                    </Label>
-                    <p className="text-sm text-[#A1A1A1] mb-4">
-                      Adjust these sliders to define how your AI ambassador communicates
-                    </p>
-                    
-                    {toneAttributes.map(attr => (
-                      <div key={attr.label} className="space-y-2 mb-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-[#1E1E1E]">{attr.opposite}</span>
-                          <span className="text-sm text-[#1E1E1E]">{attr.label}</span>
-                        </div>
-                        <Slider
-                          value={[toneSliders[attr.label.toLowerCase()]]}
-                          onValueChange={(value) => 
-                            setToneSliders(prev => ({ ...prev, [attr.label.toLowerCase()]: value[0] }))
-                          }
-                          max={100}
-                          step={1}
-                          className="flex-1"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      Example phrases your brand would say
-                    </Label>
-                    <Textarea
-                      placeholder="Share 3-5 phrases that capture your brand's voice"
-                      className="rounded-xl border-gray-200 min-h-[100px]"
-                      value={brandPhrases}
-                      onChange={(e) => setBrandPhrases(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      Things your brand would NEVER say
-                    </Label>
-                    <Textarea
-                      placeholder="Are there any topics, phrases, or tones to avoid?"
-                      className="rounded-xl border-gray-200 min-h-[80px]"
-                      value={avoidPhrases}
-                      onChange={(e) => setAvoidPhrases(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block">
-                      Call-to-Action style
-                    </Label>
-                    <Input
-                      placeholder="e.g., Direct questions, Soft suggestions, Action-oriented"
-                      className="rounded-xl border-gray-200"
-                      value={ctaStyle}
-                      onChange={(e) => setCtaStyle(e.target.value)}
-                    />
-                  </div>
-                  </TabsContent>
-                </div>
-
-                {/* Navigation Buttons - Inside Card */}
-                <div className="p-4 md:p-6 pt-4 border-t border-gray-200 bg-white lg:flex-shrink-0">
-                  <div className="flex gap-2 md:gap-3">
-                    {activeTab !== "identity" && (
-                      <Button
-                        onClick={() => {
-                          const tabs = ["identity", "values", "audience", "voice"];
-                          const currentIndex = tabs.indexOf(activeTab);
-                          if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1]);
-                        }}
-                        variant="outline"
-                        className="flex-1 rounded-xl border-gray-200 h-12"
-                      >
-                        Previous
-                      </Button>
-                    )}
-                    
-                    <Button
-                      variant="outline"
-                      onClick={handleSkipSection}
-                      className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-[#1E1E1E] rounded-xl h-12"
-                    >
-                      Skip
-                    </Button>
-                    
-                    {activeTab !== "voice" ? (
-                      <Button
-                        onClick={() => {
-                          const tabs = ["identity", "values", "audience", "voice"];
-                          const currentIndex = tabs.indexOf(activeTab);
-                          if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1]);
-                        }}
-                        className="flex-1 bg-[#6464B4] hover:bg-[#5454A0] text-white rounded-xl h-12"
-                      >
-                        Next Step
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleContinue}
-                        className="flex-1 bg-[#6464B4] hover:bg-[#5454A0] text-white rounded-xl h-12"
-                      >
-                      
-                        Complete Setup
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Tabs>
             </Card>
           </div>
           </div>
