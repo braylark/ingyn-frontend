@@ -18,36 +18,36 @@ import {
   BarChart2,
   Zap,
   ChevronDown,
-  Settings,
   Info,
   MoreHorizontal,
 } from "lucide-react";
-import { ImageWithFallback } from "./figma/ImageWithFallback";
 import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
 import AccountCreationDialog from "./AccountCreationDialog";
 import PaymentDialog from "./PaymentDialog";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 /* ──────────────────────────────────────────────── */
+/* Config & constants */
+
 const AVATAR_STORAGE_KEY = "ingyn_selected_avatar";
-const DEFAULT_CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46"; // Lyra default
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+// Lyra default (fallback if nothing in localStorage)
+const DEFAULT_CHARACTER_ID = "8cc016ad-c9c7-460e-a1d3-f348f8f8ae46";
+
+// API base URL comes from Vite env vars
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_BASE ||
+  "";
+
+// Optional: log once to help debug in browser console
+console.log("ContentCreationHub API_BASE:", API_BASE);
+
 const LOADER_GIF =
   "https://i.pinimg.com/originals/54/58/a1/5458a14ae4c8f07055b7441ff0f234cf.gif";
 
-// Read selected avatar from localStorage (set by CreateAmbassador)
-function getCurrentCharacterId(): string {
-  if (typeof window === "undefined") return DEFAULT_CHARACTER_ID;
-  try {
-    const stored = window.localStorage.getItem(AVATAR_STORAGE_KEY);
-    if (!stored) return DEFAULT_CHARACTER_ID;
-    const parsed = JSON.parse(stored) as { characterId?: string };
-    return parsed?.characterId || DEFAULT_CHARACTER_ID;
-  } catch {
-    return DEFAULT_CHARACTER_ID;
-  }
-}
-
 type PostStatus = "processing" | "ready" | "failed";
+
 interface PostItem {
   id: number;
   image: string;
@@ -57,6 +57,7 @@ interface PostItem {
   predictedReach: string;
   bestTime: string;
 }
+
 interface ContentCreationHubProps {
   hasAccount: boolean;
   onAccountCreated: () => void;
@@ -64,60 +65,84 @@ interface ContentCreationHubProps {
 
 /* ──────────────────────────────────────────────── */
 /* Helpers */
-const coerceCaption = (raw: any): string => {
-  if (!raw) return "";
-  if (typeof raw === "string") return raw;
 
-  // Try typical Gemini / OpenAI-style responses
+function getCurrentCharacterId(): string {
+  if (typeof window === "undefined") return DEFAULT_CHARACTER_ID;
+
+  try {
+    const raw = window.localStorage.getItem(AVATAR_STORAGE_KEY);
+    if (!raw) return DEFAULT_CHARACTER_ID;
+
+    const parsed = JSON.parse(raw) as { characterId?: string };
+    return parsed.characterId || DEFAULT_CHARACTER_ID;
+  } catch {
+    return DEFAULT_CHARACTER_ID;
+  }
+}
+
+/** Try to pull a string caption from various model shapes */
+function coerceCaption(data: any): string {
+  if (!data) return "";
+  if (typeof data === "string") return data;
+
+  // Common shapes: { text }, { result }, { data: { text } }, OpenAI-like, Gemini-like
+  if (typeof data.text === "string") return data.text;
+  if (typeof data.result === "string") return data.result;
+  if (data.data && typeof data.data.text === "string") return data.data.text;
+
+  // Gemini-style
   try {
     if (
-      typeof raw === "object" &&
-      raw !== null &&
-      "candidates" in raw &&
-      Array.isArray((raw as any).candidates)
+      data.candidates &&
+      Array.isArray(data.candidates) &&
+      data.candidates[0]?.content?.parts?.[0]?.text
     ) {
-      const t = (raw as any).candidates?.[0]?.content?.parts?.[0]?.text;
-      if (typeof t === "string") return t;
+      return String(data.candidates[0].content.parts[0].text);
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
 
+  // OpenAI-style
   try {
     if (
-      typeof raw === "object" &&
-      raw !== null &&
-      "choices" in raw &&
-      Array.isArray((raw as any).choices)
+      data.choices &&
+      Array.isArray(data.choices) &&
+      data.choices[0]?.message?.content
     ) {
-      const t = (raw as any).choices?.[0]?.message?.content;
-      if (typeof t === "string") return t;
+      return String(data.choices[0].message.content);
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
 
   try {
-    if (typeof raw === "object" && raw !== null && "text" in raw) {
-      const t = (raw as any).text;
-      if (typeof t === "string") return t;
-    }
-  } catch {}
-
-  try {
-    return JSON.stringify(raw);
+    return JSON.stringify(data);
   } catch {
     return "";
   }
-};
+}
 
-const extractHashtags = (caption: string) =>
-  caption
+function extractHashtags(caption: string) {
+  return caption
     .split(/\s+/)
     .filter((w) => w.startsWith("#"))
     .slice(0, 6);
+}
 
-const estimateReach = () => "12.4k est reach";
-const suggestBestTime = () => "Tue 7:30 PM";
+function estimateReach() {
+  const bands = ["1.2k–2.1k", "2.4k–3.3k", "3.8k–5.1k", "5.2k–7.4k"];
+  return bands[Math.floor(Math.random() * bands.length)];
+}
+
+function suggestBestTime() {
+  const slots = ["Mon 7:30 PM", "Tue 9:00 AM", "Thu 3:15 PM", "Sat 11:00 AM"];
+  return slots[Math.floor(Math.random() * slots.length)];
+}
 
 /* ──────────────────────────────────────────────── */
 /* Visual blocks */
+
 function LoaderBlock() {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-[#f9f9f9] rounded-xl p-4">
@@ -130,13 +155,11 @@ function LoaderBlock() {
           maxHeight: "70%",
           display: "block",
           borderRadius: 8,
+          backgroundColor: "#f9f9f9",
         }}
       />
-      <div className="mt-4 text-sm font-medium text-gray-800 bg-white/90 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.08)] text-center">
-        <span className="inline-flex items-center gap-2 px-3 py-1.5">
-          <Sparkles className="w-4 h-4 text-[#6464B4]" />
-          Cooking your content magic… hang tight ✨
-        </span>
+      <div className="mt-3 text-xs text-[#6B7280] text-center">
+        Ingyn is generating your Higgsfield-powered preview…
       </div>
     </div>
   );
@@ -163,13 +186,24 @@ function FailedBlock({ onRetry }: { onRetry: () => void }) {
 
 /* ──────────────────────────────────────────────── */
 /* Backend calls */
+
 async function generateImageFromBackend(prompt: string) {
-  const res = await fetch(`${API_BASE}/api/v1/generate-image`, {
+  const url = `${API_BASE}/api/v1/generate-image`;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, characterId: getCurrentCharacterId() }),
+    body: JSON.stringify({
+      prompt,
+      characterId: getCurrentCharacterId(),
+    }),
   });
-  if (!res.ok) throw new Error(await res.text());
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Image generation failed with ${res.status}`);
+  }
+
   return res.json();
 }
 
@@ -177,16 +211,28 @@ async function generateCaptionFromBackend(topicPrompt: string) {
   const gptPrompt =
     `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
     `Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
-  const res = await fetch(`${API_BASE}/api/v1/generate-text`, {
+
+  const url = `${API_BASE}/api/v1/generate-text`;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: gptPrompt, characterId: getCurrentCharacterId() }),
+    body: JSON.stringify({
+      prompt: gptPrompt,
+      characterId: getCurrentCharacterId(),
+    }),
   });
-  if (!res.ok) throw new Error(await res.text());
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Caption generation failed with ${res.status}`);
+  }
+
   return res.json();
 }
 
 /* ──────────────────────────────────────────────── */
+
 export default function ContentCreationHub({
   hasAccount,
   onAccountCreated,
@@ -196,9 +242,10 @@ export default function ContentCreationHub({
   const [myPosts, setMyPosts] = useState<PostItem[]>([]);
   const [nextId, setNextId] = useState(100);
   const [activeTab, setActiveTab] = useState<"my-posts" | "insights">(
-    "my-posts"
+    "my-posts",
   );
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
   const [showTrainDialog, setShowTrainDialog] = useState(false);
   const [showAccountDialog, setShowAccountDialog] = useState(!hasAccount);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -210,6 +257,16 @@ export default function ContentCreationHub({
       promptRef.current?.focus();
       return;
     }
+
+    // If API_BASE is empty, fail early with a clearer error
+    if (!API_BASE) {
+      console.error("API_BASE is empty. Check VITE_API_BASE_URL in Netlify.");
+      alert(
+        "API is not configured. Please set VITE_API_BASE_URL in your Netlify environment variables.",
+      );
+      return;
+    }
+
     setGenerating(true);
 
     const optimisticId = nextId;
@@ -229,62 +286,66 @@ export default function ContentCreationHub({
     setActiveTab("my-posts");
 
     try {
-      const imageRes = await generateImageFromBackend(customPrompt);
-      const url =
-        Array.isArray((imageRes as any).image_urls) &&
-        (imageRes as any).image_urls.length
-          ? (imageRes as any).image_urls[0]
-          : "";
-      if (!url) throw new Error("No image URL");
+      const [imageRes, captionRes] = await Promise.all([
+        generateImageFromBackend(customPrompt),
+        generateCaptionFromBackend(customPrompt),
+      ]);
 
-      let captionRaw: any = "";
-      try {
-        captionRaw = await generateCaptionFromBackend(customPrompt);
-      } catch {
-        captionRaw = "";
+      const imageUrl =
+        (imageRes as any)?.image_urls?.[0] ||
+        (imageRes as any)?.url ||
+        (imageRes as any)?.data?.url ||
+        "";
+
+      if (!imageUrl) {
+        throw new Error("No image URL returned from backend");
       }
 
-      // Robust parse + guaranteed fallback
+      let captionRaw: any = captionRes;
       let caption = coerceCaption(captionRaw).trim();
       if (!caption) caption = `✨ ${customPrompt}`;
+
+      const hashtags = extractHashtags(caption);
 
       setMyPosts((prev) =>
         prev.map((p) =>
           p.id === optimisticId
             ? {
                 ...p,
-                image: url,
+                image: imageUrl,
                 caption,
                 status: "ready",
-                hashtags: extractHashtags(caption),
+                hashtags,
                 predictedReach: estimateReach(),
                 bestTime: suggestBestTime(),
               }
-            : p
-        )
+            : p,
+        ),
       );
+
       setCustomPrompt("");
-    } catch {
+    } catch (err) {
+      console.error("Error generating content:", err);
       setMyPosts((prev) =>
         prev.map((p) =>
-          p.id === optimisticId ? { ...p, status: "failed" } : p
-        )
+          p.id === optimisticId ? { ...p, status: "failed" } : p,
+        ),
       );
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleDeletePost = (postId: number) =>
+  const handleDeletePost = (postId: number) => {
     setMyPosts((prev) => prev.filter((p) => p.id !== postId));
+  };
 
-  /* ──────────────────────────────────────────────── */
-  /* Rendering helpers */
   const renderPostCard = (post: PostItem) => {
     const isProcessing = post.status === "processing";
     const isFailed = post.status === "failed";
     const isReady = post.status === "ready";
 
+    // LIST VIEW
     if (viewMode === "list") {
       return (
         <Card
@@ -395,7 +456,7 @@ export default function ContentCreationHub({
       );
     }
 
-    // Grid view
+    // GRID VIEW
     return (
       <Card
         key={post.id}
@@ -488,7 +549,6 @@ export default function ContentCreationHub({
     );
   };
 
-  /* ──────────────────────────────────────────────── */
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -509,7 +569,8 @@ export default function ContentCreationHub({
           </h2>
           <p className="text-sm text-[#6B7280] max-w-xl">
             Generate a Higgsfield image and caption combo tuned to your
-            ambassador&apos;s voice. No prompt engineering degree required.
+            ambassador&apos;s voice. Your avatar choice (Lyra or Mello) controls
+            which character generates the content.
           </p>
         </div>
         <div className="flex flex-col items-stretch md:items-end gap-2">
@@ -519,7 +580,7 @@ export default function ContentCreationHub({
               className="rounded-full text-xs flex items-center gap-2"
               onClick={() => setShowTrainDialog(true)}
             >
-              <Settings className="w-3 h-3" />
+              <Sparkles className="w-3 h-3" />
               Train Ambassador
             </Button>
             <Button
@@ -533,8 +594,8 @@ export default function ContentCreationHub({
           <div className="flex items-center gap-2 text-[11px] text-[#6B7280]">
             <Info className="w-3 h-3" />
             <span>
-              Avatar choice (Lyra / Mello) controls which Higgsfield character
-              is used.
+              Your selected avatar (saved from Create Ambassador) is used for all
+              generations.
             </span>
           </div>
         </div>
@@ -580,6 +641,7 @@ export default function ContentCreationHub({
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
           />
+
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280]">
               <Badge className="bg-[#F5F5FA] text-[#4B5563] border-0 flex items-center gap-1">
@@ -649,7 +711,7 @@ export default function ContentCreationHub({
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`flex items-center gap-1 text-[11px] px-3 py-1 rounded-full ${
+              className={`flex itemsCenter gap-1 text-[11px] px-3 py-1 rounded-full ${
                 viewMode === "list"
                   ? "bg-white shadow-sm text-[#111827]"
                   : "text-[#6B7280]"
@@ -696,9 +758,7 @@ export default function ContentCreationHub({
       ) : (
         <Tabs
           value={activeTab}
-          onValueChange={(v) =>
-            setActiveTab(v as "my-posts" | "insights")
-          }
+          onValueChange={(v) => setActiveTab(v as "my-posts" | "insights")}
           className="w-full"
         >
           <div className="flex items-center justify-between mb-3">
