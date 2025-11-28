@@ -17,8 +17,8 @@ import {
   Lightbulb,
   BookOpen,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import ImageWithFallback from "./figma/ImageWithFallback";
+import { motion, AnimatePresence } from "motion/react";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface CreateAmbassadorProps {
   onComplete?: () => void;
@@ -606,8 +606,8 @@ export default function CreateAmbassador({
                   ))}
                 </div>
                 <p className="text-xs text-[#A1A1A1] mt-2">
-                  This choice controls which Higgsfield character (Lyra or Mello) is used when generating
-                  your visuals and captions.
+                  This choice controls which Higgsfield character (Lyra or Mello) is used when
+                  generating your visuals and captions.
                 </p>
               </div>
 
@@ -643,10 +643,12 @@ export default function CreateAmbassador({
                     <motion.p
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 4 }}
                       transition={{ duration: 0.2 }}
                       className="text-sm text-[#A1A1A1]"
                     >
-                      As you fill this out, we&apos;ll summarize how your ambassador shows up online.
+                      As you fill this out, we&apos;ll summarize how your ambassador shows up
+                      online.
                     </motion.p>
                   )}
                 </AnimatePresence>
@@ -713,8 +715,8 @@ export default function CreateAmbassador({
                 <div className="mt-3 p-3 rounded-xl bg-[#F5F5FA] border border-dashed border-gray-200 flex items-start gap-2">
                   <BookOpen className="w-4 h-4 text-[#6464B4] mt-0.5" />
                   <p className="text-xs text-[#4B4B4B]">
-                    Your answers here guide how your Higgsfield character speaks, writes, and appears
-                    across content—so it feels like an extension of you, not a generic AI.
+                    Your answers here guide how your Higgsfield character speaks, writes, and
+                    appears across content—so it feels like an extension of you, not a generic AI.
                   </p>
                 </div>
               </div>
