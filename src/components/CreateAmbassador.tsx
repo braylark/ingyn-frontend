@@ -42,20 +42,22 @@ export default function CreateAmbassador({
   const [brandStory, setBrandStory] = useState("");
   const [primaryFocus, setPrimaryFocus] = useState("");
   const [contentKeywords, setContentKeywords] = useState("");
-
   const [previewSummary, setPreviewSummary] = useState("");
 
+  // Build a compact summary for the preview card
   useEffect(() => {
     let summary = "";
 
     if (brandStory) {
       summary =
-        brandStory.slice(0, 160) + (brandStory.length > 160 ? "…" : "");
+        brandStory.slice(0, 140) + (brandStory.length > 140 ? "…" : "");
     } else if (primaryFocus && contentKeywords) {
       const keywords = contentKeywords.split(",").slice(0, 3).join(", ");
       summary = `Focused on ${primaryFocus.toLowerCase()}, creating content around ${keywords}.`;
     } else if (primaryFocus) {
       summary = `A ${primaryFocus.toLowerCase()} ambassador helping your audience take action.`;
+    } else {
+      summary = "";
     }
 
     setPreviewSummary(summary);
@@ -79,17 +81,17 @@ export default function CreateAmbassador({
       console.error("Failed to save selected avatar:", err);
     }
 
-    onComplete?.();
+    if (onComplete) onComplete();
   };
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      {/* Page header */}
-      <header className="max-w-6xl mx-auto px-4 pt-6 pb-4 flex items-start gap-3">
+      {/* Header */}
+      <header className="max-w-6xl mx-auto px-4 pt-6 pb-3 flex items-start gap-3">
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full h-9 w-9 mt-1"
+          className="rounded-full h-9 w-9 mt-1 shrink-0"
           onClick={onBack}
         >
           <ArrowLeft className="w-4 h-4" />
@@ -103,40 +105,40 @@ export default function CreateAmbassador({
             Let&apos;s Train Your AI Ambassador
           </h1>
           <p className="text-sm text-[#6B7280] max-w-2xl">
-            Choose your avatar and share a few details so your AI ambassador can
-            speak in your brand&apos;s voice.
+            Pick your avatar and share a few details so your AI ambassador can
+            represent your brand with the right look, tone, and focus.
           </p>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-6xl mx-auto px-4 pb-10">
-        <div className="grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.15fr)] items-start">
-          {/* LEFT: Preview & avatar selection */}
-          <Card className="bg-white border-0 rounded-2xl p-4 md:p-6 space-y-5">
-            {/* AI Insights */}
-            <div className="bg-gradient-to-r from-[#6464B4] to-[#8B5CF6] rounded-2xl p-4 text-white flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
+      {/* Content */}
+      <main className="max-w-6xl mx-auto px-4 pb-8">
+        <div className="grid gap-5 lg:gap-7 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.1fr)] items-start">
+          {/* LEFT: Preview + avatar selection */}
+          <Card className="bg-white border-0 rounded-2xl p-4 md:p-5 space-y-4 md:space-y-5">
+            {/* AI insights banner */}
+            <div className="bg-gradient-to-r from-[#6464B4] to-[#8B5CF6] rounded-2xl p-4 md:p-5 text-white flex items-start gap-3">
+              <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/15 flex items-center justify-center shrink-0">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium">AI Insights</p>
-                <p className="text-xs md:text-sm text-white/80">
-                  Your avatar choice and profile details guide how your AI shows
-                  up in every generated post.
+                <p className="text-xs md:text-sm text-white/85">
+                  The more details you provide, the better your AI ambassador
+                  will embody your brand&apos;s personality and values.
                 </p>
               </div>
             </div>
 
-            {/* Avatar picker */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Avatars */}
+            <div className="space-y-3 md:space-y-4">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-[#111827]">
                     Live Preview
                   </p>
                   <p className="text-xs text-[#6B7280]">
-                    Choose your avatar style and see a quick summary.
+                    Choose your avatar style and see how they show up.
                   </p>
                 </div>
                 <Badge className="bg-[#F5F5FA] text-[#4B5563] border-0 text-[11px]">
@@ -156,7 +158,7 @@ export default function CreateAmbassador({
                         key={avatar.id}
                         type="button"
                         onClick={() => setSelectedAvatar(index)}
-                        className={`relative rounded-2xl overflow-hidden border transition-all aspect-[4/5] max-h-64 mx-auto w-full ${
+                        className={`relative rounded-2xl overflow-hidden border-2 transition-all aspect-[4/5] max-h-64 ${
                           isSelected
                             ? "border-[#6464B4] shadow-md"
                             : "border-gray-200 hover:border-gray-300"
@@ -176,7 +178,7 @@ export default function CreateAmbassador({
                           </div>
                         )}
                         <div className="absolute bottom-2 left-2 right-2">
-                          <div className="inline-flex px-2 py-1 rounded-full bg-black/55 backdrop-blur text-[11px] text-white">
+                          <div className="inline-flex px-2 py-1 rounded-full bg-black/60 backdrop-blur text-[11px] text-white">
                             {avatar.name}
                           </div>
                         </div>
@@ -187,7 +189,7 @@ export default function CreateAmbassador({
               </div>
 
               {/* Snapshot */}
-              <div className="mt-2 rounded-2xl border border-gray-100 bg-[#F9FAFB] p-4 space-y-2">
+              <div className="mt-1 rounded-2xl border border-gray-100 bg-[#F9FAFB] p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
                     <Sparkles className="w-4 h-4 text-[#6464B4]" />
@@ -206,24 +208,26 @@ export default function CreateAmbassador({
                   <p className="text-sm text-[#4B5563]">{previewSummary}</p>
                 ) : (
                   <p className="text-xs text-[#6B7280]">
-                    Start filling in details on the right to preview how your AI
-                    ambassador will be described in captions.
+                    Start filling in the profile fields on the right to see a
+                    quick description of how your ambassador will be presented.
                   </p>
                 )}
               </div>
             </div>
           </Card>
 
-          {/* RIGHT: Simple identity form */}
-          <Card className="bg-white border-0 rounded-2xl p-4 md:p-6 flex flex-col gap-5">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-[#111827]">
-                Ambassador Profile
-              </p>
-              <p className="text-xs text-[#6B7280]">
-                These details help Higgsfield generate on-brand visuals and
-                captions for you.
-              </p>
+          {/* RIGHT: Profile form */}
+          <Card className="bg-white border-0 rounded-2xl p-4 md:p-5 flex flex-col gap-4 md:gap-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[#111827]">
+                  Ambassador Profile
+                </p>
+                <p className="text-xs text-[#6B7280]">
+                  These details guide how your ambassador talks and what they
+                  prioritise in content.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -238,8 +242,7 @@ export default function CreateAmbassador({
                   onChange={(e) => setAmbassadorName(e.target.value)}
                 />
                 <p className="text-[11px] text-[#6B7280]">
-                  This is how your ambassador will introduce themselves in posts
-                  and replies.
+                  This name may appear in captions and replies.
                 </p>
               </div>
 
@@ -248,8 +251,8 @@ export default function CreateAmbassador({
                   Brand Story
                 </Label>
                 <Textarea
-                  placeholder="What's your brand's mission? What inspired you to start? Who are you here to help?"
-                  className="min-h-[110px] rounded-2xl text-sm"
+                  placeholder="What’s your brand's mission? What inspired you to start? What problem are you solving?"
+                  className="min-h-[110px] md:min-h-[130px] rounded-2xl text-sm"
                   value={brandStory}
                   onChange={(e) => setBrandStory(e.target.value)}
                 />
@@ -260,7 +263,7 @@ export default function CreateAmbassador({
                   Primary Focus
                 </Label>
                 <Input
-                  placeholder="e.g., Wellness, Streetwear, Creator tools, Finance"
+                  placeholder="e.g., Wellness, Creator education, Fashion, Finance"
                   className="rounded-xl text-sm"
                   value={primaryFocus}
                   onChange={(e) => setPrimaryFocus(e.target.value)}
@@ -272,20 +275,20 @@ export default function CreateAmbassador({
                   Content Keywords
                 </Label>
                 <Input
-                  placeholder="fitness, mental health, product launches, lifestyle..."
+                  placeholder="fitness, wellness, mindfulness, nutrition..."
                   className="rounded-xl text-sm"
                   value={contentKeywords}
                   onChange={(e) => setContentKeywords(e.target.value)}
                 />
                 <p className="text-[11px] text-[#6B7280]">
-                  Separate with commas — these help shape topics, hooks, and
-                  visual ideas.
+                  Separate with commas — we use these to fine-tune content
+                  ideas and visuals.
                 </p>
               </div>
             </div>
 
-            {/* Actions — always visible */}
-            <div className="pt-3 mt-auto flex flex-col md:flex-row md:items-center gap-3">
+            {/* Actions pinned at bottom of card */}
+            <div className="pt-2 mt-auto flex flex-col md:flex-row md:items-center gap-3">
               <Button
                 variant="outline"
                 className="w-full md:w-auto rounded-full text-sm"
