@@ -1,439 +1,363 @@
 import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Textarea } from "./ui/textarea";
+import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
-import { MoreHorizontal, RefreshCw, Send, Sparkles } from "lucide-react";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+  Loader2,
+  RefreshCw,
+  Send,
+  Grid3X3,
+  List,
+  Sparkles,
+} from "lucide-react";
 
 const AVATAR_STORAGE_KEY = "ingyn_selected_avatar";
 
-type GeneratedPostStatus = "idle" | "generating" | "success" | "failed";
+type ViewMode = "grid" | "list";
+
+interface SelectedAvatar {
+  name: string;
+  characterId: string;
+}
 
 interface GeneratedPost {
   id: string;
   prompt: string;
   imageUrl?: string;
-  caption?: string;
-  status: GeneratedPostStatus;
+  caption: string;
   createdAt: string;
+  status: "success" | "error";
+  errorMessage?: string;
 }
+
+const getApiBaseUrl = () => {
+  const raw = import.meta.env.VITE_API_BASE_URL || "";
+  return raw.replace(/\/+$/, "");
+};
 
 export default function ContentCreationHub() {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [posts, setPosts] = useState<GeneratedPost[]>([]);
+  const [avatar, setAvatar] = useState<SelectedAvatar | null>(null);
 
-  const [currentCharacterName, setCurrentCharacterName] = useState<
-    string | null
-  >(null);
-
-  // Read selected ambassador from localStorage
+  // Load selected avatar from CreateAmbassador setup
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
         const stored = window.localStorage.getItem(AVATAR_STORAGE_KEY);
         if (stored) {
-          const parsed = JSON.parse(stored) as {
-            name?: string;
-            characterId?: string;
-          };
-          if (parsed?.name) {
-            setCurrentCharacterName(parsed.name);
+          const parsed = JSON.parse(stored) as SelectedAvatar;
+          if (parsed?.characterId) {
+            setAvatar(parsed);
           }
         }
       }
     } catch (err) {
-      console.error("Error reading avatar from localStorage:", err);
+      console.error("Failed to read stored avatar:", err);
     }
   }, []);
-
-  const getSelectedCharacterId = (): string | undefined => {
-    try {
-      if (typeof window === "undefined") return undefined;
-      const stored = window.localStorage.getItem(AVATAR_STORAGE_KEY);
-      if (!stored) return undefined;
-      const parsed = JSON.parse(stored) as {
-        characterId?: string;
-      };
-      return parsed.characterId;
-    } catch (err) {
-      console.error("Failed to parse stored avatar:", err);
-      return undefined;
-    }
-  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    setError(null);
     setIsGenerating(true);
 
-    const characterId = getSelectedCharacterId();
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-    const apiUrl = `${baseUrl.replace(/\/$/, "")}/generate-image`;
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/generate-image`;
 
-    const newPost: GeneratedPost = {
-      id: `${Date.now()}`,
+    const requestBody: Record<string, unknown> = {
       prompt: prompt.trim(),
-      status: "generating",
-      createdAt: new Date().toISOString(),
     };
 
-    setPosts((prev) => [newPost, ...prev]);
+    if (avatar?.characterId) {
+      requestBody.characterId = avatar.characterId;
+    }
 
     try {
-      const res = await fetch(apiUrl, {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          characterId,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      if (!res.ok) {
-        throw new Error(`Request failed with status ${res.status}`);
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
       }
 
-      const data = await res.json();
+      const data = await response.json();
 
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === newPost.id
-            ? {
-                ...post,
-                status: "success",
-                imageUrl: data.imageUrl ?? data.image_url,
-                caption: data.caption ?? data.text ?? "",
-              }
-            : post,
-        ),
-      );
-    } catch (err: any) {
-      console.error("Error generating image:", err);
-      setError("We couldn’t generate this post. Try again or tweak your prompt.");
+      const imageUrl =
+        data.imageUrl || data.image_url || data.image || undefined;
+      const caption =
+        data.caption ||
+        data.text ||
+        "No caption was returned, but your image was generated.";
 
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === newPost.id
-            ? {
-                ...post,
-                status: "failed",
-              }
-            : post,
-        ),
-      );
+      const newPost: GeneratedPost = {
+        id: crypto.randomUUID(),
+        prompt: prompt.trim(),
+        imageUrl,
+        caption,
+        createdAt: new Date().toISOString(),
+        status: imageUrl ? "success" : "error",
+        errorMessage: imageUrl ? undefined : "Missing image URL in response.",
+      };
+
+      setPosts((prev) => [newPost, ...prev]);
+    } catch (error: any) {
+      console.error("Error generating post:", error);
+
+      const newPost: GeneratedPost = {
+        id: crypto.randomUUID(),
+        prompt: prompt.trim(),
+        imageUrl: undefined,
+        caption: "",
+        createdAt: new Date().toISOString(),
+        status: "error",
+        errorMessage:
+          "We couldn't generate this post. Try again or adjust your prompt.",
+      };
+
+      setPosts((prev) => [newPost, ...prev]);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleRetry = (postId: string) => {
-    const post = posts.find((p) => p.id === postId);
-    if (!post) return;
+  const handleRetry = (post: GeneratedPost) => {
     setPrompt(post.prompt);
-    void handleGenerate();
+    // user can tweak text then click generate again
   };
-
-  const hasPosts = posts.length > 0;
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-6">
-        {/* Header / Prompt area */}
-        <Card className="bg-white border-0 rounded-2xl p-4 md:p-6 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="space-y-1">
+      <main className="max-w-6xl mx-auto px-4 pt-6 pb-10 space-y-5 md:space-y-6">
+        {/* Top banner / prompt card */}
+        <Card className="border-0 rounded-2xl p-4 md:p-5 space-y-4 md:space-y-5">
+          <div className="flex flex-col md:flex-row md:items-start gap-3 md:gap-4 justify-between">
+            <div className="space-y-2 max-w-xl">
               <div className="inline-flex items-center gap-2">
-                <Badge className="bg-[#E5ECFF] text-[#3B4AB8] border-0 text-[11px]">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  Higgsfield Visual + Caption
+                <Badge className="bg-[#6464B4]/10 text-[#6464B4] border-0 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Higgsfield Studio
                 </Badge>
-                {currentCharacterName && (
-                  <span className="text-[11px] text-[#6B7280]">
-                    Using ambassador: <strong>{currentCharacterName}</strong>
-                  </span>
+                {avatar?.name && (
+                  <Badge className="bg-[#F3F4FF] text-[#4B4BB3] border-0 text-[11px]">
+                    Using {avatar.name}
+                  </Badge>
                 )}
               </div>
-              <h1 className="text-lg md:text-xl font-semibold text-[#111827]">
-                Generate scroll-stopping posts in one click
-              </h1>
-              <p className="text-xs md:text-sm text-[#6B7280] max-w-xl">
-                Describe the scene or idea. We’ll create an on-brand Higgsfield
-                visual and caption tailored to your ambassador.
+              <h2 className="text-lg md:text-xl font-semibold text-[#111827]">
+                Generate a Higgsfield visual + caption
+              </h2>
+              <p className="text-sm text-[#6B7280]">
+                Describe the post you want. We&apos;ll generate an on-brand
+                image and caption using your current ambassador.
               </p>
+              {avatar?.name && (
+                <p className="text-[11px] text-[#9CA3AF]">
+                  Tip: Mention <span className="font-medium">{avatar.name}</span>{" "}
+                  in your prompt for sharper consistency.
+                </p>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 text-[11px] text-[#9CA3AF]">
-              <span>Auto-estimates reach</span>
+            {/* Small hint block on the right for desktop */}
+            <div className="hidden md:flex flex-col items-end gap-1 text-right">
+              <p className="text-xs text-[#6B7280]">
+                Each post gets an estimated reach band.
+              </p>
+              <p className="text-xs text-[#6B7280]">
+                We suggest a posting window, not a strict schedule.
+              </p>
             </div>
           </div>
 
-          {/* Prompt area */}
+          {/* Prompt + button */}
           <div className="space-y-3">
-            <Tabs defaultValue="custom">
-              <TabsList className="bg-[#F3F4FF] rounded-full p-1 inline-flex">
-                <TabsTrigger
-                  value="custom"
-                  className="rounded-full px-3 py-1 text-xs"
-                >
-                  Custom prompt
-                </TabsTrigger>
-                <TabsTrigger
-                  value="templates"
-                  className="rounded-full px-3 py-1 text-xs"
-                  disabled
-                >
-                  Templates (coming soon)
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Fake tabs header – Custom prompt / Templates */}
+            <div className="inline-flex rounded-full bg-[#F3F4F6] p-1 text-xs">
+              <button className="px-3 py-1 rounded-full bg-white shadow-sm text-[#111827] font-medium">
+                Custom prompt
+              </button>
+              <button className="px-3 py-1 rounded-full text-[#6B7280]">
+                Templates
+              </button>
+            </div>
 
             <Textarea
-              placeholder="e.g., Lyra modeling neon streetwear headphones in a studio, bold cinematic lighting..."
-              className="min-h-[110px] rounded-2xl text-sm"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              placeholder="e.g., Lyra modeling neon streetwear sneakers in a moody night-time city scene..."
+              className="min-h-[110px] md:min-h-[130px] rounded-2xl text-sm"
             />
 
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-[11px] text-[#6B7280]">
-              <div className="flex flex-col gap-1">
-                <span>
-                  ✨ Mention <strong>Lyra</strong> or <strong>Mello</strong> in your
-                  prompt for sharper, character-aware results.
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-between">
+              <div className="text-xs text-[#6B7280]">
+                <span className="hidden sm:inline">
+                  Every post gets an estimated reach band.{" "}
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-1 h-1 rounded-full bg-[#9CA3AF]" />
-                  Uses your current ambassador training data.
-                </span>
+                <span>We suggest a posting window, not a hard schedule.</span>
               </div>
+              <Button
+                className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm bg-[#111827] hover:bg-black w-full sm:w-auto"
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim()}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Generate with Higgsfield
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
 
-              <div className="flex items-center gap-3">
-                <span className="hidden md:inline text-[#9CA3AF]">
-                  We suggest a posting window, not a hard schedule.
-                </span>
-                <Button
-                  className="rounded-full px-4 py-2 text-sm bg-[#111827] hover:bg-black flex items-center gap-2"
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim()}
-                >
-                  {isGenerating ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Generating...
-                    </>
+        {/* Secondary controls (view mode / filters) */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-medium text-[#111827]">Generated posts</p>
+            <div className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${
+                  viewMode === "grid"
+                    ? "bg-[#111827] text-white"
+                    : "text-[#6B7280]"
+                }`}
+              >
+                <Grid3X3 className="w-3 h-3" />
+                Grid
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${
+                  viewMode === "list"
+                    ? "bg-[#111827] text-white"
+                    : "text-[#6B7280]"
+                }`}
+              >
+                <List className="w-3 h-3" />
+                List
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-[#6B7280]">
+            <span className="hidden sm:inline">Showing</span>
+            <select className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs">
+              <option>Last 30 days</option>
+              <option>Last 7 days</option>
+              <option>All time</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Generated posts */}
+        {posts.length === 0 ? (
+          <div className="border border-dashed border-gray-300 rounded-2xl bg-white/70 p-8 text-center text-sm text-[#6B7280]">
+            No posts yet. Start by describing a post above — we&apos;ll generate
+            a visual and caption with your ambassador&apos;s style.
+          </div>
+        ) : (
+          <div
+            className={
+              viewMode === "grid"
+                ? "grid gap-4 md:gap-5 md:grid-cols-2"
+                : "space-y-4 md:space-y-5"
+            }
+          >
+            {posts.map((post) => (
+              <Card
+                key={post.id}
+                className="border-0 rounded-2xl overflow-hidden flex flex-col bg-white"
+              >
+                {/* Image area */}
+                <div className="relative bg-[#F3F4F6]">
+                  {post.status === "success" && post.imageUrl ? (
+                    <ImageWithFallback
+                      src={post.imageUrl}
+                      alt={post.prompt}
+                      className="w-full object-cover max-h-72 md:max-h-80"
+                    />
                   ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      Generate with Higgsfield
-                    </>
+                    <div className="h-40 md:h-48 flex flex-col items-center justify-center text-sm text-[#6B7280] gap-2">
+                      <p className="font-medium">
+                        Something went wrong generating this post.
+                      </p>
+                      <p className="text-xs text-[#9CA3AF]">
+                        Try again or adjust your prompt.
+                      </p>
+                    </div>
                   )}
-                </Button>
-              </div>
-            </div>
+                </div>
 
-            {error && (
-              <p className="text-xs text-red-500 mt-1">
-                {error} If it keeps happening, try simplifying your prompt.
-              </p>
-            )}
-          </div>
-        </Card>
+                {/* Content area */}
+                <div className="p-4 md:p-5 flex flex-col gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-[#9CA3AF] mb-1">
+                      Higgsfield Visual + Caption
+                    </p>
+                    {post.status === "success" && post.caption ? (
+                      <p className="text-sm text-[#111827] leading-relaxed">
+                        {post.caption}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-[#6B7280]">
+                        {post.errorMessage ??
+                          "We couldn't generate this post. Try again or adjust your prompt."}
+                      </p>
+                    )}
+                  </div>
 
-        {/* Generated posts / Insights */}
-        <Card className="bg-white border-0 rounded-2xl p-4 md:p-6 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-[#111827]">
-                Generated posts
-              </h2>
-              <TabsList className="bg-[#F3F4FF] rounded-full p-1 h-8">
-                <TabsTrigger
-                  value="grid"
-                  className={`rounded-full px-3 py-1 text-xs ${
-                    viewMode === "grid" ? "bg-white shadow-sm" : ""
-                  }`}
-                  onClick={() => setViewMode("grid")}
-                >
-                  Grid
-                </TabsTrigger>
-                <TabsTrigger
-                  value="list"
-                  className={`rounded-full px-3 py-1 text-xs ${
-                    viewMode === "list" ? "bg-white shadow-sm" : ""
-                  }`}
-                  onClick={() => setViewMode("list")}
-                >
-                  List
-                </TabsTrigger>
-              </TabsList>
-            </div>
+                  <div className="text-[11px] text-[#9CA3AF]">
+                    Prompt: <span className="italic">{post.prompt}</span>
+                  </div>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full"
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled>Filter by reach (soon)</DropdownMenuItem>
-                <DropdownMenuItem disabled>Export report (soon)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {!hasPosts && (
-            <div className="border border-dashed border-gray-200 rounded-2xl py-10 flex flex-col items-center justify-center gap-2">
-              <Sparkles className="w-6 h-6 text-[#9CA3AF]" />
-              <p className="text-sm font-medium text-[#111827]">
-                No posts generated yet
-              </p>
-              <p className="text-xs text-[#6B7280] max-w-sm text-center">
-                Start with a short, punchy prompt like &quot;Lyra unboxing our new
-                sneakers in a cozy studio&quot; and we&apos;ll handle the visual and
-                caption.
-              </p>
-            </div>
-          )}
-
-          {hasPosts && (
-            <div
-              className={
-                viewMode === "grid"
-                  ? "grid gap-4 md:gap-5 md:grid-cols-2"
-                  : "space-y-4"
-              }
-            >
-              {posts.map((post) => {
-                const isLoading = post.status === "generating";
-                const isFailed = post.status === "failed";
-
-                return (
-                  <Card
-                    key={post.id}
-                    className="border border-gray-100 rounded-2xl p-3 md:p-4 flex flex-col gap-3"
-                  >
-                    {/* Image / placeholder */}
-                    <div className="relative rounded-xl bg-[#F9FAFB] overflow-hidden min-h-[180px] max-h-[260px] flex items-center justify-center">
-                      {post.status === "success" && post.imageUrl ? (
-                        <img
-                          src={post.imageUrl}
-                          alt={post.caption || post.prompt}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : isLoading ? (
-                        <div className="flex flex-col items-center gap-2 text-xs text-[#6B7280]">
-                          <RefreshCw className="w-5 h-5 animate-spin text-[#6464B4]" />
-                          <span>Crafting your Higgsfield visual…</span>
-                        </div>
-                      ) : isFailed ? (
-                        <div className="flex flex-col items-center gap-1 text-xs text-[#6B7280]">
-                          <span className="font-medium text-[#111827]">
-                            Something went wrong generating this post.
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="mt-1 rounded-full h-7 px-3 text-xs"
-                            onClick={() => handleRetry(post.id)}
-                          >
-                            <RefreshCw className="w-3 h-3 mr-1" />
-                            Try again
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-1 text-xs text-[#6B7280]">
-                          <span>Ready when you are.</span>
-                        </div>
-                      )}
+                  {/* Footer actions */}
+                  <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-xs text-[#9CA3AF] cursor-not-allowed"
+                    >
+                      <span className="w-3 h-3 rounded-full border border-[#D1D5DB]" />
+                      Save to Planner
+                    </button>
+                    <div className="flex items-center gap-2 justify-end">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="rounded-full h-8 w-8"
+                        onClick={() => handleRetry(post)}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button className="rounded-full h-8 px-3 text-xs inline-flex items-center gap-1">
+                        <Send className="w-3.5 h-3.5" />
+                        Export
+                      </Button>
                     </div>
-
-                    {/* Caption + actions */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-semibold text-[#4F46E5]">
-                            Higgsfield Visual + Caption
-                          </span>
-                          <span className="text-[11px] text-[#9CA3AF]">
-                            {new Date(post.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        {post.status === "success" && (
-                          <Badge className="bg-[#ECFDF5] text-[#166534] border-0 text-[10px]">
-                            Ready to export
-                          </Badge>
-                        )}
-                        {post.status === "generating" && (
-                          <Badge className="bg-[#EFF6FF] text-[#1D4ED8] border-0 text-[10px]">
-                            Generating…
-                          </Badge>
-                        )}
-                        {post.status === "failed" && (
-                          <Badge className="bg-[#FEF2F2] text-[#B91C1C] border-0 text-[10px]">
-                            Generation failed
-                          </Badge>
-                        )}
-                      </div>
-
-                      {post.caption ? (
-                        <p className="text-sm text-[#111827] whitespace-pre-line">
-                          {post.caption}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-[#6B7280]">
-                          {post.status === "generating"
-                            ? "We’re writing your caption..."
-                            : "Caption will appear here once generated."}
-                        </p>
-                      )}
-
-                      <div className="pt-2 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 text-[11px] text-[#9CA3AF]">
-                          <span>♡ Save to Planner</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-full text-xs px-3"
-                            onClick={() => handleRetry(post.id)}
-                            disabled={isLoading}
-                          >
-                            <RefreshCw className="w-3 h-3 mr-1" />
-                            Regenerate
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-8 rounded-full text-xs px-3 bg-[#111827] hover:bg-black flex items-center gap-1.5"
-                          >
-                            <Send className="w-3 h-3" />
-                            Export
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );
