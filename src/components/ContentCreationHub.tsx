@@ -25,6 +25,7 @@ import TrainAmbassadorDialog from "./TrainAmbassadorDialog";
 import AccountCreationDialog from "./AccountCreationDialog";
 import PaymentDialog from "./PaymentDialog";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { motion, AnimatePresence } from "framer-motion";
 
 /* ──────────────────────────────────────────────── */
 /* Config & constants */
@@ -40,7 +41,7 @@ const API_BASE =
   import.meta.env.VITE_API_BASE ||
   "";
 
-// Optional: log once to help debug in browser console
+// Debug log to confirm value at runtime
 console.log("ContentCreationHub API_BASE:", API_BASE);
 
 const LOADER_GIF =
@@ -71,11 +72,20 @@ function getCurrentCharacterId(): string {
 
   try {
     const raw = window.localStorage.getItem(AVATAR_STORAGE_KEY);
-    if (!raw) return DEFAULT_CHARACTER_ID;
+    console.log("Raw stored avatar:", raw);
+    if (!raw) {
+      console.log("No avatar in storage, using DEFAULT_CHARACTER_ID");
+      return DEFAULT_CHARACTER_ID;
+    }
 
-    const parsed = JSON.parse(raw) as { characterId?: string };
-    return parsed.characterId || DEFAULT_CHARACTER_ID;
-  } catch {
+    const parsed = JSON.parse(raw) as { characterId?: string; name?: string };
+    console.log("Parsed stored avatar:", parsed);
+
+    const id = parsed.characterId || DEFAULT_CHARACTER_ID;
+    console.log("Using characterId from storage:", id);
+    return id;
+  } catch (err) {
+    console.error("Error reading avatar from storage:", err);
     return DEFAULT_CHARACTER_ID;
   }
 }
@@ -85,12 +95,10 @@ function coerceCaption(data: any): string {
   if (!data) return "";
   if (typeof data === "string") return data;
 
-  // Common shapes: { text }, { result }, { data: { text } }, OpenAI-like, Gemini-like
   if (typeof data.text === "string") return data.text;
   if (typeof data.result === "string") return data.result;
   if (data.data && typeof data.data.text === "string") return data.data.text;
 
-  // Gemini-style
   try {
     if (
       data.candidates &&
@@ -103,7 +111,6 @@ function coerceCaption(data: any): string {
     // ignore
   }
 
-  // OpenAI-style
   try {
     if (
       data.choices &&
@@ -188,6 +195,9 @@ function FailedBlock({ onRetry }: { onRetry: () => void }) {
 /* Backend calls */
 
 async function generateImageFromBackend(prompt: string) {
+  const characterId = getCurrentCharacterId();
+  console.log("Calling generate-image with characterId:", characterId);
+
   const url = `${API_BASE}/api/v1/generate-image`;
 
   const res = await fetch(url, {
@@ -195,7 +205,7 @@ async function generateImageFromBackend(prompt: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       prompt,
-      characterId: getCurrentCharacterId(),
+      characterId,
     }),
   });
 
@@ -208,6 +218,9 @@ async function generateImageFromBackend(prompt: string) {
 }
 
 async function generateCaptionFromBackend(topicPrompt: string) {
+  const characterId = getCurrentCharacterId();
+  console.log("Calling generate-text with characterId:", characterId);
+
   const gptPrompt =
     `Write a brand-safe Instagram caption (<=120 words) with a friendly, confident tone. ` +
     `Include 3–6 hashtags.\n\nTopic: ${topicPrompt}`;
@@ -219,7 +232,7 @@ async function generateCaptionFromBackend(topicPrompt: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       prompt: gptPrompt,
-      characterId: getCurrentCharacterId(),
+      characterId,
     }),
   });
 
@@ -258,7 +271,6 @@ export default function ContentCreationHub({
       return;
     }
 
-    // If API_BASE is empty, fail early with a clearer error
     if (!API_BASE) {
       console.error("API_BASE is empty. Check VITE_API_BASE_URL in Netlify.");
       alert(
@@ -345,7 +357,6 @@ export default function ContentCreationHub({
     const isFailed = post.status === "failed";
     const isReady = post.status === "ready";
 
-    // LIST VIEW
     if (viewMode === "list") {
       return (
         <Card
